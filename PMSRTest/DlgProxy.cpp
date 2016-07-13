@@ -16,7 +16,6 @@
 
 IMPLEMENT_DYNCREATE(CPMSRTestDlgAutoProxy, CCmdTarget)
 
-
 CPMSRTestDlgAutoProxy::CPMSRTestDlgAutoProxy()
 {
 	EnableAutomation();
