@@ -614,3 +614,4 @@ void CPMSRTestDlg::OnBnClickedButton8()
 	// TODO:  在此添加控件通知处理程序代码
 	ShellExecute(NULL, "open", "C:\\Program Files\\Common Files\\Microsoft Shared\\Ink\\TabTip.exe", NULL, NULL, SW_SHOWNORMAL);//打开软键盘
 }
+
