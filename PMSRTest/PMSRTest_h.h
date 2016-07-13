@@ -4,7 +4,7 @@
 
 
  /* File created by MIDL compiler version 8.00.0603 */
-/* at Tue Jun 28 21:20:00 2016
+/* at Thu Jul 14 00:59:49 2016
  */
 /* Compiler settings for PMSRTest.idl:
     Oicf, W1, Zp8, env=Win32 (32b run), target_arch=X86 8.00.0603 

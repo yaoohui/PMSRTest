@@ -17,13 +17,6 @@
 #define MODEID	0x16		// 模块ID，串口通讯部分
 #define MAX_BUFFER_SIZE		2048
 
-typedef struct DataFlag
-{
-	BOOL bIsCommOpen = false;	// 串口打开标志
-	UINT uiBytesSent;		// 发送的总字节数
-	UINT uiBytesReceived;	// 接收的总字节数
-	CString strReceivedData;	// 接收的数据
-};
 
 OVERLAPPED osRead;
 OVERLAPPED osShare;
@@ -32,18 +25,27 @@ BYTE byRxBuffer[MAX_BUFFER_SIZE];
 DWORD RxLength = 0;
 BYTE RxFlag = 0;
 
-struct DataFlag st_DataFlag;
 HANDLE    m_hComm;	// 串口句柄
 UINT ReadComm(LPVOID pParam);
 
-UINT TestDelay;//开始测试延时
-CString ComNum;//串口端口号
-UINT BaudRate, ByteSize, StopBits, Parity;
+//UINT TestDelay;//开始测试延时
+//CString ComNum;//串口端口号
+//UINT BaudRate, ByteSize, StopBits, Parity;
 
 CStatusBarCtrl m_StatusBar;
 
 //数据库
 _ConnectionPtr p_Connection;
+
+// 全局结构体变量，保存设置的变量
+struct DataFlag st_DataFlag;
+struct ConfigVal st_ConfigData;
+CString strIniFileName = "set.ini";
+
+CPMSRSet dlgSettings;
+
+
+
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -158,7 +160,7 @@ BOOL CPMSRTestDlg::OnInitDialog()
 
 	// TODO:  在此添加额外的初始化代码
 	InitStatusBar(); //状态栏初始化
-	ReadSettings();//读取设置
+	ReadSettings(); //读取设置
 	OpenComm();//打开串口
 	ConnectSQLServer();//连接数据库
 	Initinterface();//初始化界面
@@ -263,7 +265,14 @@ void CPMSRTestDlg::OpenComm()
 	if (st_DataFlag.bIsCommOpen == FALSE)
 	{
 		CString str1;
-		str1.Format("\\\\.\\%s", ComNum);	// 串口号大于10时，无法打开，需要改串口名
+		if (st_DataFlag.strCommName == "")
+		{
+			AfxMessageBox("无串口！");
+			m_StatusBar.SetText("无串口！", 2, 0);
+			return;
+		}
+
+		str1.Format("\\\\.\\%s", st_DataFlag.strCommName);	// 串口号大于10时，无法打开，需要改串口名
 		m_hComm = CreateFile(str1,  //串口号
 			GENERIC_READ | GENERIC_WRITE, //指定可以对串口进行读写操作
 			0, //表示串口为独占打开
@@ -277,7 +286,7 @@ void CPMSRTestDlg::OpenComm()
 		if (m_hComm == INVALID_HANDLE_VALUE)
 		{
 			//AfxMessageBox("串口建立失败！");
-			str.Format("找不到%s",ComNum);
+			str.Format("找不到%s", st_DataFlag.strCommName);
 			m_StatusBar.SetText(str, 2, 0);
 			return;
 		}
@@ -300,13 +309,13 @@ void CPMSRTestDlg::OpenComm()
 
 		GetCommState(m_hComm, &dcb);//获得参数  
 
-		dcb.BaudRate = BaudRate;
+		dcb.BaudRate = st_DataFlag.uiBaudRate;
 
-		dcb.ByteSize = ByteSize;
+		dcb.ByteSize = 8;// st_DataFlag.uiByteSize;
 
-		dcb.StopBits = TWOSTOPBITS;
+		dcb.StopBits = ONESTOPBIT;// st_DataFlag.uiStopBits;// TWOSTOPBITS;
 
-		dcb.Parity = Parity; //校验位
+		dcb.Parity = NOPARITY;// st_DataFlag.uiParity; //校验位
 
 		dcb.fBinary = TRUE;// 指定是否允许二进制模式
 		dcb.fParity = TRUE;// 指定是否允许奇偶校验
@@ -346,7 +355,6 @@ void CPMSRTestDlg::OnBnClickedOk()
 //
 void CPMSRTestDlg::ReadSettings()
 {
-	char* pszFileName = "set.ini";
 	CStdioFile settingFile;
 	CFileException fileException;
 
@@ -364,7 +372,7 @@ void CPMSRTestDlg::ReadSettings()
 	//}
 
 	//读文件
-	if (settingFile.Open("set.ini", CFile::modeCreate | CFile::modeNoTruncate | CFile::typeText | CFile::modeReadWrite), &fileException)
+	if (settingFile.Open(strIniFileName, CFile::modeCreate | CFile::modeNoTruncate | CFile::typeText | CFile::modeReadWrite), &fileException)
 	{
 		CString strContent;
 		CString temp;
@@ -384,40 +392,40 @@ void CPMSRTestDlg::ReadSettings()
 				{
 					//strcpy(temp, strContent.Mid(n+1,l-n-2));
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					ComNum = temp; //获取串口号
-					strCOMStatus = ComNum;
+					st_DataFlag.strCommName = temp; //获取串口号
+					strCOMStatus = temp;
 				}
 				else if (strContent.Left(n - 1) == _T("BaudRate"))
 				{
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					BaudRate = atoi(temp); //获取比特率
+					st_DataFlag.uiBaudRate = atoi(temp); //获取比特率
 					strCOMStatus = strCOMStatus + " " + temp;
 				}
-				else if (strContent.Left(n - 1) == _T("ByteSize"))
-				{
-					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					ByteSize = atoi(temp); //获取数据位
-					strCOMStatus = strCOMStatus + " " + temp;
-				}
-				else if (strContent.Left(n - 1) == _T("StopBits"))
-				{
-					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					StopBits = atoi(temp); //获取停止位
-					strCOMStatus = strCOMStatus + " " + temp;
-				}
-				else if (strContent.Left(n - 1) == _T("Parity"))
-				{
-					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					Parity = atoi(temp); //获取传感器使能设置
-					strCOMStatus = strCOMStatus + " " + temp;
-				}
+				//else if (strContent.Left(n - 1) == _T("ByteSize"))
+				//{
+				//	temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
+				//	st_DataFlag.uiByteSize = atoi(temp); //获取数据位
+				//	strCOMStatus = strCOMStatus + " " + temp;
+				//}
+				//else if (strContent.Left(n - 1) == _T("StopBits"))
+				//{
+				//	temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
+				//	StopBits = atoi(temp); //获取停止位
+				//	strCOMStatus = strCOMStatus + " " + temp;
+				//}
+				//else if (strContent.Left(n - 1) == _T("Parity"))
+				//{
+				//	temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
+				//	Parity = atoi(temp); //获取传感器使能设置
+				//	strCOMStatus = strCOMStatus + " " + temp;
+				//}
 				else if (strContent.Left(n - 1) == _T("TestDelay"))
 				{
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					TestDelay = atoi(temp); //获取传感器使能设置
-					if ((TestDelay < 0) || (TestDelay > 90000))
+					st_ConfigData.StartDelay = atoi(temp)*1000; //获取传感器使能设置
+					if ((st_ConfigData.StartDelay < 0) || (st_ConfigData.StartDelay > 90000))
 					{
-						TestDelay = 10000;
+						st_ConfigData.StartDelay = 10000;
 						AfxMessageBox(_T("set.ini文件中，延时时间设置错误！"), MB_OK);
 					}
 				}

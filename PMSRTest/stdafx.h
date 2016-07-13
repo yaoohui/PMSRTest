@@ -64,3 +64,29 @@
 
 
 #import "C:\Program Files\Common Files\System\ado\msado15.dll" no_namespace rename("BOF","adoBOF") rename("EOF","adoEOF")
+
+
+struct DataFlag
+{
+	BOOL bIsCommOpen = false;	// 串口打开标志
+	UINT uiBytesSent;		// 发送的总字节数
+	UINT uiBytesReceived;	// 接收的总字节数
+	CString strReceivedData;	// 接收的数据
+	USHORT usCommNum;	// 串口数量
+
+	CString strCommName;	// 当前串口号
+	UINT uiBaudRate;
+	UCHAR uiByteSize;
+	UCHAR uiStopBits;
+	UCHAR uiParity;
+};
+
+struct ConfigVal
+{
+	UINT StartDelay;	// 启动延时时间，单位：ms
+};
+
+extern struct ConfigVal st_ConfigData;
+extern struct DataFlag st_DataFlag;
+extern CString strIniFileName;
+

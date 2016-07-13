@@ -6,7 +6,8 @@
 #include "PMSRSet.h"
 #include "afxdialogex.h"
 
-extern UINT TestDelay;//开始测试延时
+CStdioFile settingFile;
+CFileException fileException;
 
 // CPMSRSet 对话框
 
@@ -38,10 +39,71 @@ END_MESSAGE_MAP()
 
 // CPMSRSet 消息处理程序
 
-
+// 保存参数
 void CPMSRSet::OnBnClickedOk()
 {
 	// TODO:  在此添加控件通知处理程序代码
+	CString str,str1;
+
+	// 如果有栏为空，则填入默认值
+
+	// 启动延时
+	m_edit_SetTimeDelay.GetWindowTextA(str);
+	if (str == "")
+		st_ConfigData.StartDelay = 30 * 1000;
+	else
+		st_ConfigData.StartDelay = atoi(str)*1000;
+	
+
+	//写文件
+	if (settingFile.Open(strIniFileName, CFile::typeText | CFile::modeReadWrite | CFile::modeCreate), &fileException)
+	{
+		UpdateData(TRUE);
+
+		settingFile.WriteString("//设置参数 Setting Parameter\r\n\r\n");
+		settingFile.WriteString("//端口号\r\n");		
+		m_combo_ComNumSet.GetWindowTextA(str);
+		st_DataFlag.strCommName = str;
+		str1.Format("ComNum = %s;\r\n\r\n", str);
+		settingFile.WriteString(str1);
+		
+		settingFile.WriteString("//波特率\r\n");
+		m_combo_BaudRate.GetWindowTextA(str);
+		if (str == "")
+		{
+			str1.Format("BaudRate = 9600;\r\n\r\n");
+			st_DataFlag.uiBaudRate = 9600;
+		}
+		else
+		{
+			str1.Format("BaudRate = %s;\r\n\r\n", str);
+			st_DataFlag.uiBaudRate = atoi(str);
+		}
+		settingFile.WriteString(str1);
+
+		settingFile.WriteString("//数据位\r\n");
+		settingFile.WriteString("ByteSize = 8;\r\n\r\n");
+		st_DataFlag.uiByteSize = 8;
+
+		settingFile.WriteString("//停止位\r\n");
+		settingFile.WriteString("StopBits = 1;\r\n\r\n");
+		st_DataFlag.uiStopBits = 1;
+
+		settingFile.WriteString("//校验\r\n");
+		settingFile.WriteString("Parity = No;\r\n\r\n");
+		st_DataFlag.uiParity = NOPARITY;
+
+		settingFile.WriteString("//启动延时，单位：秒\r\n");
+		str1.Format("StartDelay = %d;\r\n\r\n", st_ConfigData.StartDelay/1000);
+		settingFile.WriteString(str1);
+	}
+	else
+	{
+		TRACE("Can't open file %s,error=%u\n", strIniFileName, fileException.m_cause);
+	}
+	settingFile.Close();
+
+
 	CDialogEx::OnOK();
 }
 
@@ -65,25 +127,8 @@ BOOL CPMSRSet::OnInitDialog()
 //
 void CPMSRSet::ReadSettings()
 {
-	char* pszFileName = "set.ini";
-	CStdioFile settingFile;
-	CFileException fileException;
-
-	//写文件
-	//if(settingFile.Open(pszFileName,CFile::typeText|CFile::modeCreate|CFile::modeReadWrite),&fileException)
-	//{
-	//	settingFile.WriteString("第1行\n");
-	//	CString strOrder;
-	//	strOrder.Format("%d,%.3f",66,88.88);
-	//	settingFile.WriteString(strOrder);
-	//}
-	//else
-	//{
-	//	TRACE("Can't open file %s,error=%u\n",pszFileName,fileException.m_cause);
-	//}
-
 	//读文件
-	if (settingFile.Open("set.ini", CFile::modeCreate | CFile::modeNoTruncate | CFile::typeText | CFile::modeReadWrite), &fileException)
+	if (settingFile.Open(strIniFileName, CFile::modeCreate | CFile::modeNoTruncate | CFile::typeText | CFile::modeReadWrite), &fileException)
 	{
 		CString strContent;
 		CString temp = 0;
@@ -110,16 +155,16 @@ void CPMSRSet::ReadSettings()
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
 					m_combo_BaudRate.SetWindowTextA(temp);
 				}
-				else if (strContent.Left(n - 1) == _T("TestDelay"))
+				else if (strContent.Left(n - 1) == _T("StartDelay"))
 				{
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					TestDelay = atoi(temp); //获取传感器使能设置
-					if ((TestDelay < 0) || (TestDelay > 90000))
+					st_ConfigData.StartDelay = atoi(temp)*1000; //获取传感器使能设置
+					if ((st_ConfigData.StartDelay < 0) || (st_ConfigData.StartDelay > 90000))
 					{
-						TestDelay = 10000;
+						st_ConfigData.StartDelay = 10000;
 						AfxMessageBox(_T("set.ini文件中，延时时间设置错误！"), MB_OK);
 					}
-					temp.Format("%d", TestDelay);
+					temp.Format("%d", st_ConfigData.StartDelay/1000);
 					m_edit_SetTimeDelay.SetWindowTextA(temp);
 				}
 			}
@@ -139,6 +184,8 @@ void CPMSRSet::FindComPort()
 {
 	HKEY   hKey;
 
+	st_DataFlag.usCommNum = 0;	// 串口数量
+
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("Hardware\\DeviceMap\\SerialComm"), NULL, KEY_READ, &hKey) == ERROR_SUCCESS)
 	{
 		TCHAR       szPortName[256], szComName[256];
@@ -155,6 +202,7 @@ void CPMSRSet::FindComPort()
 
 			pCombo->InsertString(nCount, szComName);
 			nCount++;
+			st_DataFlag.usCommNum++;
 		}
 		RegCloseKey(hKey);
 		pCombo->SetCurSel(0);
