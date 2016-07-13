@@ -1,0 +1,29 @@
+// PMSRTest.idl : PMSRTest.exe 的类型库源
+
+// 此文件将由 MIDL 编译器处理以产生
+// 类型库(PMSRTest.tlb)。
+
+[ uuid(21894CA1-19E5-4610-9AF9-CF8F99A20DF2), version(1.0) ]
+library PMSRTest
+{
+	importlib("stdole32.tlb");
+	importlib("stdole2.tlb");
+
+	//  CPMSRTestDoc 的主调度接口
+	
+	[ uuid(A41ADA07-9238-4D40-948F-6B62ACB076AD) ]
+	dispinterface IPMSRTest
+	{
+		properties:
+			
+		methods:
+	};
+
+	//  CPMSRTestDoc 的类信息
+	
+	[ uuid(08E80809-3712-48C0-BFE7-8FB611FB45EA) ]
+	coclass PMSRTest
+	{
+		[default] dispinterface IPMSRTest;
+	};
+};
