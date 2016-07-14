@@ -16,7 +16,7 @@
 
 #define MODEID	0x16		// 模块ID，串口通讯部分
 #define MAX_BUFFER_SIZE		2048
-
+#define ID_STATUS_BAR_CTRL              102
 
 OVERLAPPED osRead;
 OVERLAPPED osShare;
@@ -85,6 +85,7 @@ IMPLEMENT_DYNAMIC(CPMSRTestDlg, CDialogEx);
 
 CPMSRTestDlg::CPMSRTestDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(CPMSRTestDlg::IDD, pParent)
+//	, m_tchart(0)
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 	m_pAutoProxy = NULL;
@@ -109,6 +110,23 @@ void CPMSRTestDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT8, m_edit_Flux);
 	DDX_Control(pDX, IDC_EDIT9, m_edit_Pole);
 	DDX_Control(pDX, IDC_EDIT10, m_edit_SN);
+	DDX_Control(pDX, IDC_STATIC_GROUP_PARAMETER, m_group_Parameter);
+	DDX_Control(pDX, IDC_STATIC_GROUP_RESULT, m_group_Result);
+	DDX_Control(pDX, IDC_STATIC_TYPE, m_static_Type);
+	DDX_Control(pDX, IDC_STATIC_LENGTH, m_static_Length);
+	DDX_Control(pDX, IDC_STATIC_TESTTIMES, m_static_TestTimes);
+	DDX_Control(pDX, IDC_STATIC_FLUX, m_static_Flux);
+	DDX_Control(pDX, IDC_STATIC_POLE, m_static_Pole);
+	DDX_Control(pDX, IDC_STATIC_SN, m_static_SN);
+	DDX_Control(pDX, IDC_STATIC_WEIGHT, m_static_Weight);
+	DDX_Control(pDX, IDC_TCHART1, m_tchart);
+	DDX_Control(pDX, IDC_BUTTON8, m_button_Keyboard);
+	DDX_Control(pDX, IDC_BUTTON7, m_button_ScreenShot);
+	DDX_Control(pDX, IDC_BUTTON6, m_button_Save);
+	DDX_Control(pDX, IDC_BUTTON5, m_button_Print);
+	DDX_Control(pDX, IDC_BUTTON3, m_button_2D3D);
+	DDX_Control(pDX, IDC_BUTTON2, m_button_Type);
+	DDX_Control(pDX, IDC_BUTTON1, m_button_Settings);
 }
 
 BEGIN_MESSAGE_MAP(CPMSRTestDlg, CDialogEx)
@@ -122,6 +140,8 @@ BEGIN_MESSAGE_MAP(CPMSRTestDlg, CDialogEx)
 	ON_CBN_SELCHANGE(IDC_COMBO1, &CPMSRTestDlg::OnCbnSelchangeCombo1)
 	ON_WM_TIMER()
 	ON_BN_CLICKED(IDC_BUTTON8, &CPMSRTestDlg::OnBnClickedButton8)
+	ON_WM_SIZE()
+	ON_WM_CREATE()
 END_MESSAGE_MAP()
 
 
@@ -159,7 +179,8 @@ BOOL CPMSRTestDlg::OnInitDialog()
 	ShowWindow(SW_MAXIMIZE);
 
 	// TODO:  在此添加额外的初始化代码
-	InitStatusBar(); //状态栏初始化
+	LayoutFrame();	// 窗体布局
+	//InitStatusBar(); //状态栏初始化
 	ReadSettings(); //读取设置
 	OpenComm();//打开串口
 	ConnectSQLServer();//连接数据库
@@ -588,7 +609,8 @@ void CPMSRTestDlg::OnTimer(UINT_PTR nIDEvent)
 void CPMSRTestDlg::InitFont()
 {
 	CFont *f = new CFont;
-	f->CreateFont(36, 12, 0, 0, FW_BOLD, FALSE, FALSE, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("微软雅黑"));
+	f->CreateFont(30, 0, 0, 0, 0, FALSE, FALSE, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("微软雅黑"));
+	//f->CreateFont(36, 12, 0, 0, FW_BOLD, FALSE, FALSE, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("微软雅黑"));
 	((CStatic *)GetDlgItem(IDC_STATIC_TYPE))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_STATIC_LENGTH))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_STATIC_TESTTIMES))->SetFont(f, TRUE);
@@ -601,7 +623,7 @@ void CPMSRTestDlg::InitFont()
 	m_edit_length.SetFont(f, TRUE);
 	m_edit_TestTimes.SetFont(f, TRUE);
 	m_edit_Weight.SetFont(f, TRUE);
-
+	
 	((CStatic *)GetDlgItem(IDOK))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_BUTTON1))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_BUTTON2))->SetFont(f, TRUE);
@@ -623,3 +645,107 @@ void CPMSRTestDlg::OnBnClickedButton8()
 	ShellExecute(NULL, "open", "C:\\Program Files\\Common Files\\Microsoft Shared\\Ink\\TabTip.exe", NULL, NULL, SW_SHOWNORMAL);//打开软键盘
 }
 
+
+
+// 主窗体布局
+void CPMSRTestDlg::LayoutFrame()
+{
+	CRect RectClient, RectTemp; 
+	UINT uiLeft = 0, uiTop = 0, uiWidth = 0, uiHeight = 0;
+
+	GetClientRect(&RectClient); 
+	// group"测试参数"
+	uiLeft = RectClient.Width() * 2 / 3;
+	uiTop = 20;
+	uiWidth = RectClient.Width() / 3 - 20;
+	uiHeight = 220;
+	m_group_Parameter.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
+	
+	// "型号"
+	uiLeft += 20;
+	uiTop += 50;
+	m_static_Type.SetWindowPos(this, uiLeft, uiTop, 0,0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_Type.GetClientRect(&RectTemp);
+	m_combo_type.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+
+	// "长度"
+	uiTop += 50;
+	m_static_Length.SetWindowPos(this, uiLeft, uiTop, 0,0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_Length.GetClientRect(&RectTemp);
+	m_edit_length.SetWindowPos(this, uiLeft+RectTemp.Width()+2, uiTop, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+	// "磁通量"
+	m_static_Flux.SetWindowPos(this, uiLeft + uiWidth / 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_Flux.GetClientRect(&RectTemp);
+	m_edit_Flux.SetWindowPos(this, uiLeft + uiWidth / 2 + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+
+	// "测试次数"
+	uiTop += 50;
+	m_static_TestTimes.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_TestTimes.GetClientRect(&RectTemp);
+	m_edit_TestTimes.SetWindowPos(this, uiLeft+RectTemp.Width()+2, uiTop, 0,0, SWP_NOZORDER | SWP_NOSIZE);
+	// "磁极数"
+	m_static_Pole.SetWindowPos(this, uiLeft + uiWidth / 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_Pole.GetClientRect(&RectTemp);
+	m_edit_Pole.SetWindowPos(this, uiLeft + uiWidth / 2 + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+
+
+	// group"测试结果"
+	uiLeft = RectClient.Width() * 2 / 3;
+	uiTop = uiHeight + 50;
+	uiWidth = RectClient.Width() / 3 - 20;
+	uiHeight = 170;
+	m_group_Result.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
+
+	// "转子编号"
+	uiLeft += 20;
+	uiTop += 50;
+	m_static_SN.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_SN.GetClientRect(&RectTemp);
+	m_edit_SN.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+
+	// "重量"
+	uiTop += 50;
+	m_static_Weight.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_Weight.GetClientRect(&RectTemp);
+	m_edit_Weight.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+
+
+	// 按钮
+	m_group_Result.GetClientRect(&RectTemp);
+	uiTop = RectTemp.bottom + 50;
+	
+
+	// 图表
+	m_tchart.SetWindowPos(this, 50, 50, RectClient.Width()*2/3 - 100, RectClient.Height() - 100, SWP_NOZORDER);
+
+	// 状态栏
+	uiWidth = RectClient.Width()/6;
+	int strPartDim[6] = { uiWidth, uiWidth * 2, uiWidth * 3, uiWidth * 4, uiWidth*5, -1 }; //分割数量，数字为起始位置，不是宽度，-1表示到最右端。
+	m_StatusBar.SetParts(6, strPartDim);
+
+}
+
+
+void CPMSRTestDlg::OnSize(UINT nType, int cx, int cy)
+{
+	CDialogEx::OnSize(nType, cx, cy);
+
+	// TODO:  在此处添加消息处理程序代码
+	if (::IsWindow(m_static_Type.m_hWnd))// 控件有效后
+		LayoutFrame();
+
+	CRect Rect;
+	GetClientRect(&Rect);
+	m_StatusBar.SetWindowPos(0, Rect.left,Rect.top, Rect.Width(), Rect.Height()-20, SWP_NOZORDER);
+}
+
+
+int CPMSRTestDlg::OnCreate(LPCREATESTRUCT lpCreateStruct)
+{
+	if (CDialogEx::OnCreate(lpCreateStruct) == -1)
+		return -1;
+
+	// TODO:  在此添加您专用的创建代码
+	m_StatusBar.Create(WS_CHILD | WS_VISIBLE | SBT_OWNERDRAW | CCS_BOTTOM | SBARS_SIZEGRIP, CRect(0, 0, 0, 0), this, ID_STATUS_BAR_CTRL);//CCS_NOPARENTALIGN
+	return 0;
+}

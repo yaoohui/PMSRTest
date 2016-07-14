@@ -4,6 +4,7 @@
 
 #pragma once
 #include "afxwin.h"
+#include "tchart1.h"
 
 class CPMSRTestDlgAutoProxy;
 
@@ -63,4 +64,25 @@ public:
 	CEdit m_edit_Flux;
 	CEdit m_edit_Pole;
 	CEdit m_edit_SN;
+	// 主窗体布局
+	void LayoutFrame();
+	CStatic m_group_Parameter;
+	CStatic m_group_Result;
+	CStatic m_static_Type;
+	CStatic m_static_Length;
+	CStatic m_static_TestTimes;
+	CStatic m_static_Flux;
+	CStatic m_static_Pole;
+	CStatic m_static_SN;
+	CStatic m_static_Weight;
+	CTchart1 m_tchart;
+	afx_msg void OnSize(UINT nType, int cx, int cy);
+	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
+	CButton m_button_Keyboard;
+	CButton m_button_ScreenShot;
+	CButton m_button_Save;
+	CButton m_button_Print;
+	CButton m_button_2D3D;
+	CButton m_button_Type;
+	CButton m_button_Settings;
 };
