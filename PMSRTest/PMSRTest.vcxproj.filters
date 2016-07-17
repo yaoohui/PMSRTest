@@ -45,6 +45,9 @@
     <ClInclude Include="tchart1.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="CommunicationProtocol.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PMSRTest.cpp">
@@ -66,6 +69,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="tchart1.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CommunicationProtocol.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

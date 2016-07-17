@@ -14,9 +14,9 @@
 #define new DEBUG_NEW
 #endif
 
-#define MODEID	0x16		// 模块ID，串口通讯部分
+#define MODEID	0x17		// 模块ID，串口通讯部分
 #define MAX_BUFFER_SIZE		2048
-#define ID_STATUS_BAR_CTRL              102
+#define ID_STATUS_BAR_CTRL  102	// 状态栏ID
 
 OVERLAPPED osRead;
 OVERLAPPED osShare;
@@ -127,6 +127,7 @@ void CPMSRTestDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_BUTTON3, m_button_2D3D);
 	DDX_Control(pDX, IDC_BUTTON2, m_button_Type);
 	DDX_Control(pDX, IDC_BUTTON1, m_button_Settings);
+	DDX_Control(pDX, IDOK, m_button_Exit);
 }
 
 BEGIN_MESSAGE_MAP(CPMSRTestDlg, CDialogEx)
@@ -142,6 +143,8 @@ BEGIN_MESSAGE_MAP(CPMSRTestDlg, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON8, &CPMSRTestDlg::OnBnClickedButton8)
 	ON_WM_SIZE()
 	ON_WM_CREATE()
+//	ON_WM_SIZING()
+ON_WM_GETMINMAXINFO()
 END_MESSAGE_MAP()
 
 
@@ -176,9 +179,10 @@ BOOL CPMSRTestDlg::OnInitDialog()
 	SetIcon(m_hIcon, TRUE);			// 设置大图标
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
+	// TODO:  在此添加额外的初始化代码
+	CWnd::SetWindowPos(NULL, 0, 0, 1350, 850, SWP_NOZORDER | SWP_NOMOVE);// 窗体初始大小
 	ShowWindow(SW_MAXIMIZE);
 
-	// TODO:  在此添加额外的初始化代码
 	LayoutFrame();	// 窗体布局
 	//InitStatusBar(); //状态栏初始化
 	ReadSettings(); //读取设置
@@ -366,8 +370,8 @@ void CPMSRTestDlg::OpenComm()
 void CPMSRTestDlg::OnBnClickedOk()
 {
 	// TODO:  在此添加控件通知处理程序代码
-	CDialogEx::OnOK();
 	KillTimer(1);
+	CDialogEx::OnOK();
 }
 
 
@@ -465,16 +469,16 @@ void CPMSRTestDlg::ReadSettings()
 //
 // 状态栏初始化
 //
-void CPMSRTestDlg::InitStatusBar()
-{
-	m_StatusBar.Create(WS_CHILD | WS_VISIBLE | SBT_OWNERDRAW, CRect(0, 0, 0, 0), this, 0);
-
-	int strPartDim[6] = {130, 250, 350, 450, 550, -1}; //分割数量，数字为起始位置，不是宽度，-1表示到最右端。
-	m_StatusBar.SetParts(6, strPartDim);
-	//下面是在状态栏中加入图标
-	//m_StatusBar.SetIcon(1,SetIcon(AfxGetApp()->LoadIcon(IDR_MAINFRAME),FALSE));//为第二个分栏中加的图标
-
-}
+//void CPMSRTestDlg::InitStatusBar()
+//{
+//	m_StatusBar.Create(WS_CHILD | WS_VISIBLE | SBT_OWNERDRAW, CRect(0, 0, 0, 0), this, 0);
+//
+//	int strPartDim[6] = {130, 250, 350, 450, 550, -1}; //分割数量，数字为起始位置，不是宽度，-1表示到最右端。
+//	m_StatusBar.SetParts(6, strPartDim);
+//	//下面是在状态栏中加入图标
+//	//m_StatusBar.SetIcon(1,SetIcon(AfxGetApp()->LoadIcon(IDR_MAINFRAME),FALSE));//为第二个分栏中加的图标
+//
+//}
 
 
 
@@ -656,7 +660,7 @@ void CPMSRTestDlg::LayoutFrame()
 	GetClientRect(&RectClient); 
 	// group"测试参数"
 	uiLeft = RectClient.Width() * 2 / 3;
-	uiTop = 20;
+	uiTop = 40;
 	uiWidth = RectClient.Width() / 3 - 20;
 	uiHeight = 220;
 	m_group_Parameter.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
@@ -690,9 +694,10 @@ void CPMSRTestDlg::LayoutFrame()
 
 
 	// group"测试结果"
+	m_group_Parameter.GetWindowRect(&RectTemp);
 	uiLeft = RectClient.Width() * 2 / 3;
-	uiTop = uiHeight + 50;
-	uiWidth = RectClient.Width() / 3 - 20;
+	uiTop = RectTemp.bottom + 10;//uiHeight + 50;
+	uiWidth = RectTemp.Width();//RectClient.Width() / 3 - 20;
 	uiHeight = 170;
 	m_group_Result.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
 
@@ -711,9 +716,26 @@ void CPMSRTestDlg::LayoutFrame()
 
 
 	// 按钮
-	m_group_Result.GetClientRect(&RectTemp);
+	m_group_Result.GetWindowRect(&RectTemp);
+	uiLeft = RectClient.Width() * 2 / 3;
 	uiTop = RectTemp.bottom + 50;
-	
+	uiWidth = 88; uiHeight = 80;
+	m_button_Keyboard.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
+	uiLeft += uiWidth + 20;
+	m_button_ScreenShot.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
+	uiLeft += uiWidth + 20;
+	m_button_Save.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
+	uiLeft += uiWidth + 20;
+	m_button_Print.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
+	uiLeft = RectClient.Width() * 2 / 3;
+	uiTop += uiHeight + 10;
+	m_button_2D3D.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
+	uiLeft += uiWidth + 20;
+	m_button_Type.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
+	uiLeft += uiWidth + 20;
+	m_button_Settings.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
+	uiLeft += uiWidth + 20;
+	m_button_Exit.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
 
 	// 图表
 	m_tchart.SetWindowPos(this, 50, 50, RectClient.Width()*2/3 - 100, RectClient.Height() - 100, SWP_NOZORDER);
@@ -748,4 +770,15 @@ int CPMSRTestDlg::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	// TODO:  在此添加您专用的创建代码
 	m_StatusBar.Create(WS_CHILD | WS_VISIBLE | SBT_OWNERDRAW | CCS_BOTTOM | SBARS_SIZEGRIP, CRect(0, 0, 0, 0), this, ID_STATUS_BAR_CTRL);//CCS_NOPARENTALIGN
 	return 0;
+}
+
+
+void CPMSRTestDlg::OnGetMinMaxInfo(MINMAXINFO* lpMMI)
+{
+	// TODO:  在此添加消息处理程序代码和/或调用默认值
+	// 设置窗体的最小尺寸
+	lpMMI->ptMinTrackSize.x = 1350;
+	lpMMI->ptMinTrackSize.y = 850;
+
+	CDialogEx::OnGetMinMaxInfo(lpMMI);
 }

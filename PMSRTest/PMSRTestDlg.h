@@ -47,7 +47,7 @@ public:
 	afx_msg void OnBnClickedOk();
 	void CPMSRTestDlg::OpenComm();
 	void CPMSRTestDlg::ReadSettings();
-	void CPMSRTestDlg::InitStatusBar();
+//	void CPMSRTestDlg::InitStatusBar();
 	void CPMSRTestDlg::ConnectSQLServer();
 	void CPMSRTestDlg::Initinterface();
 	void CPMSRTestDlg::InitFont();
@@ -85,4 +85,6 @@ public:
 	CButton m_button_2D3D;
 	CButton m_button_Type;
 	CButton m_button_Settings;
+	afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
+	CButton m_button_Exit;
 };
