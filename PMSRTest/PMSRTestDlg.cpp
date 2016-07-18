@@ -9,12 +9,13 @@
 #include "afxdialogex.h"
 #include "PMSRSet.h"
 #include "PMSRType.h"
+#include "CommunicationProtocol.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
-#define MODEID	0x17		// 模块ID，串口通讯部分
+//#define MODEID	0x17		// 模块ID，串口通讯部分
 #define MAX_BUFFER_SIZE		2048
 #define ID_STATUS_BAR_CTRL  102	// 状态栏ID
 
@@ -22,7 +23,7 @@ OVERLAPPED osRead;
 OVERLAPPED osShare;
 
 BYTE byRxBuffer[MAX_BUFFER_SIZE];
-DWORD RxLength = 0;
+UINT RxLength = 0;
 BYTE RxFlag = 0;
 
 HANDLE    m_hComm;	// 串口句柄
@@ -38,12 +39,27 @@ CStatusBarCtrl m_StatusBar;
 _ConnectionPtr p_Connection;
 
 // 全局结构体变量，保存设置的变量
-struct DataFlag st_DataFlag;
+struct CommPara st_CommPara;
 struct ConfigVal st_ConfigData;
 CString strIniFileName = "set.ini";
 
 CPMSRSet dlgSettings;
+CommunicationProtocol CPInvokeInstance;// 通信协议对象
+CEditLog  m_EditLogger;// 用于显示接收数据的实例
 
+//状态栏分块名称
+enum EM_StatusBarParts
+{
+	SBPART_TIME = 0,	// 时间栏
+	SBPART_COMM,		// 通信接口名及波特率
+	SBPART_COMM_STATE,	// 通信接口打开状态
+	SBPART_RCOUNT,		// 接收数据个数
+	SBPART_SCOUNT,		// 发送数据个数
+	SBPART_DATABASE,	// 数据库
+	SBPART_PCNAME,		// 当前计算机
+};
+
+#define SHOW_DEBUG	// 定义此，则显示串口调试部分控件
 
 
 
@@ -128,6 +144,12 @@ void CPMSRTestDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_BUTTON2, m_button_Type);
 	DDX_Control(pDX, IDC_BUTTON1, m_button_Settings);
 	DDX_Control(pDX, IDOK, m_button_Exit);
+	DDX_Control(pDX, IDC_EDIT12, m_edit_ReceiveData);
+	DDX_Control(pDX, IDC_CHECK1, m_check_ReceiveHex);
+	DDX_Control(pDX, IDC_BUTTON9, m_button_Clear);
+	DDX_Control(pDX, IDC_EDIT13, m_edit_SendData);
+	DDX_Control(pDX, IDC_CHECK3, m_check_SendHex);
+	DDX_Control(pDX, IDC_BUTTON10, m_button_Send);
 }
 
 BEGIN_MESSAGE_MAP(CPMSRTestDlg, CDialogEx)
@@ -145,6 +167,10 @@ BEGIN_MESSAGE_MAP(CPMSRTestDlg, CDialogEx)
 	ON_WM_CREATE()
 //	ON_WM_SIZING()
 ON_WM_GETMINMAXINFO()
+ON_MESSAGE(WM_COMM_RXCHAR, &CPMSRTestDlg::OnCommRxchar)
+ON_BN_CLICKED(IDC_BUTTON9, &CPMSRTestDlg::OnBnClickedButton9)
+ON_MESSAGE(WM_COMM_BREAK_DETECTED, &CPMSRTestDlg::OnCommBreakDetected)
+ON_MESSAGE(WM_COMM_RXFLAG_DETECTED, &CPMSRTestDlg::OnCommRxflagDetected)
 END_MESSAGE_MAP()
 
 
@@ -182,16 +208,20 @@ BOOL CPMSRTestDlg::OnInitDialog()
 	// TODO:  在此添加额外的初始化代码
 	CWnd::SetWindowPos(NULL, 0, 0, 1350, 850, SWP_NOZORDER | SWP_NOMOVE);// 窗体初始大小
 	ShowWindow(SW_MAXIMIZE);
+	ShowDebugControls();// 调试控件显示/不显示
 
 	LayoutFrame();	// 窗体布局
-	//InitStatusBar(); //状态栏初始化
+	InitStatusBar(); //状态栏初始化
 	ReadSettings(); //读取设置
-	OpenComm();//打开串口
+	OpenComm();//打开串口。必须在读取设置ReadSettings()运行后，再调用
 	ConnectSQLServer();//连接数据库
 	Initinterface();//初始化界面
 	InitFont();//初始化界面字体
 	SetTimer(1, 1000, NULL);//启动定时器
+	
+	m_EditLogger.SetEditCtrl(m_edit_ReceiveData.m_hWnd);	// CEditLog类变量关联接收文本框
 
+	CommandProcessInit();
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -285,87 +315,111 @@ BOOL CPMSRTestDlg::CanExit()
 // 打开串口
 void CPMSRTestDlg::OpenComm()
 {
-	CString str;
-
-	if (st_DataFlag.bIsCommOpen == FALSE)
+	if (!st_CommPara.bIsCommOpen)// 串口未打开
 	{
-		CString str1;
-		if (st_DataFlag.strCommName == "")
+		if (st_CommPara.m_Comm.InitPort(this->m_hWnd, st_CommPara.uiCommName, st_CommPara.uiBaudRate, st_CommPara.uiParity, st_CommPara.uiByteSize,
+			st_CommPara.uiStopBits, EV_RXCHAR | EV_BREAK, MAX_BUFFER_SIZE))
 		{
-			AfxMessageBox("无串口！");
-			m_StatusBar.SetText("无串口！", 2, 0);
-			return;
+			st_CommPara.bIsCommOpen = TRUE;
+			m_StatusBar.SetText("串口打开成功", SBPART_COMM_STATE, 0);
+			//m_EditLogger.SetEditCtrl(m_edit_ReceiveData.m_hWnd);	// CEditLog类变量关联接收文本框
+			st_CommPara.m_Comm.StartMonitoring();// 启动串口类监听
+		}
+		else
+		{
+			m_StatusBar.SetText("串口设置出错！", SBPART_COMM_STATE, 0);
 		}
 
-		str1.Format("\\\\.\\%s", st_DataFlag.strCommName);	// 串口号大于10时，无法打开，需要改串口名
-		m_hComm = CreateFile(str1,  //串口号
-			GENERIC_READ | GENERIC_WRITE, //指定可以对串口进行读写操作
-			0, //表示串口为独占打开
-			NULL,// 权限控制，表示返回的句柄不能被子进程继承。
-			OPEN_EXISTING, //表示当指定串口不存在时，程序将返回失败
-			FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, //表示文件属性
-			/*当打开串口时，必须指定 FILE_FLAG_OVERLAPPED（重叠方式），它表示文件或设备不会维护访问指针，则在读写时，必须使用OVERLAPPED 结构指定访问的文件偏移量。
-			*/
-			NULL);//临时文件的句柄，不使用。
-
-		if (m_hComm == INVALID_HANDLE_VALUE)
-		{
-			//AfxMessageBox("串口建立失败！");
-			str.Format("找不到%s", st_DataFlag.strCommName);
-			m_StatusBar.SetText(str, 2, 0);
-			return;
-		}
-
-		/********************输入缓冲区和输出缓冲区的大小***********/
-		SetupComm(m_hComm, 4096, 4096);
-		PurgeComm(m_hComm, PURGE_TXCLEAR | PURGE_RXCLEAR);// 清空输入和输出缓冲区
-		SetCommMask(m_hComm, EV_RXCHAR);// 设置通知事件。EV_RXCHAR: 输入缓冲区有数据时，通过WaitCommEvent函数可以获得通知
-
-		DCB dcb;
-
-		////设置超时时间
-		//COMMTIMEOUTS TimeOuts;
-		//TimeOuts.ReadIntervalTimeout = 0;
-		//TimeOuts.ReadTotalTimeoutMultiplier = 0;
-		//TimeOuts.ReadTotalTimeoutConstant = 50;
-		//TimeOuts.WriteTotalTimeoutMultiplier = 0;
-		//TimeOuts.WriteTotalTimeoutConstant = 0;
-		//SetCommTimeouts(m_hComm, &TimeOuts);
-
-		GetCommState(m_hComm, &dcb);//获得参数  
-
-		dcb.BaudRate = st_DataFlag.uiBaudRate;
-
-		dcb.ByteSize = 8;// st_DataFlag.uiByteSize;
-
-		dcb.StopBits = ONESTOPBIT;// st_DataFlag.uiStopBits;// TWOSTOPBITS;
-
-		dcb.Parity = NOPARITY;// st_DataFlag.uiParity; //校验位
-
-		dcb.fBinary = TRUE;// 指定是否允许二进制模式
-		dcb.fParity = TRUE;// 指定是否允许奇偶校验
-
-		//根据设备控制块配置通信设备
-		if (!SetCommState(m_hComm, &dcb))
-		{
-			//AfxMessageBox("串口设置出错！");
-			m_StatusBar.SetText("串口设置出错！", 2, 0); 
-			CloseHandle(m_hComm);
-			return;
-		}
-
-		st_DataFlag.bIsCommOpen = TRUE;
-		m_StatusBar.SetText("串口打开成功", 2, 0);
-		// 创建线程读取串口数据
-		//AfxBeginThread(ReadComm, this); //开读串口线程
 	}
-	else
+	else// 串口已打开
 	{
-		CloseHandle(m_hComm);
-		m_hComm = INVALID_HANDLE_VALUE;
-		st_DataFlag.bIsCommOpen = FALSE;
+		st_CommPara.m_Comm.ClosePort();
+		st_CommPara.bIsCommOpen = FALSE;
 	}
 }
+//void CPMSRTestDlg::OpenComm()
+//{
+//	CString str;
+//
+//	if (st_CommPara.bIsCommOpen == FALSE)
+//	{
+//		CString str1;
+//		if (st_CommPara.strCommName == "")
+//		{
+//			AfxMessageBox("无串口！");
+//			m_StatusBar.SetText("无串口！", 2, 0);
+//			return;
+//		}
+//
+//		str1.Format("\\\\.\\%s", st_CommPara.strCommName);	// 串口号大于10时，无法打开，需要改串口名
+//		m_hComm = CreateFile(str1,  //串口号
+//			GENERIC_READ | GENERIC_WRITE, //指定可以对串口进行读写操作
+//			0, //表示串口为独占打开
+//			NULL,// 权限控制，表示返回的句柄不能被子进程继承。
+//			OPEN_EXISTING, //表示当指定串口不存在时，程序将返回失败
+//			FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, //表示文件属性
+//			/*当打开串口时，必须指定 FILE_FLAG_OVERLAPPED（重叠方式），它表示文件或设备不会维护访问指针，则在读写时，必须使用OVERLAPPED 结构指定访问的文件偏移量。
+//			*/
+//			NULL);//临时文件的句柄，不使用。
+//
+//		if (m_hComm == INVALID_HANDLE_VALUE)
+//		{
+//			//AfxMessageBox("串口建立失败！");
+//			str.Format("找不到%s", st_CommPara.strCommName);
+//			m_StatusBar.SetText(str, 2, 0);
+//			return;
+//		}
+//
+//		/********************输入缓冲区和输出缓冲区的大小***********/
+//		SetupComm(m_hComm, 4096, 4096);
+//		PurgeComm(m_hComm, PURGE_TXCLEAR | PURGE_RXCLEAR);// 清空输入和输出缓冲区
+//		SetCommMask(m_hComm, EV_RXCHAR);// 设置通知事件。EV_RXCHAR: 输入缓冲区有数据时，通过WaitCommEvent函数可以获得通知
+//
+//		DCB dcb;
+//
+//		////设置超时时间
+//		//COMMTIMEOUTS TimeOuts;
+//		//TimeOuts.ReadIntervalTimeout = 0;
+//		//TimeOuts.ReadTotalTimeoutMultiplier = 0;
+//		//TimeOuts.ReadTotalTimeoutConstant = 50;
+//		//TimeOuts.WriteTotalTimeoutMultiplier = 0;
+//		//TimeOuts.WriteTotalTimeoutConstant = 0;
+//		//SetCommTimeouts(m_hComm, &TimeOuts);
+//
+//		GetCommState(m_hComm, &dcb);//获得参数  
+//
+//		dcb.BaudRate = st_CommPara.uiBaudRate;
+//
+//		dcb.ByteSize = 8;// st_CommPara.uiByteSize;
+//
+//		dcb.StopBits = ONESTOPBIT;// st_CommPara.uiStopBits;// TWOSTOPBITS;
+//
+//		dcb.Parity = NOPARITY;// st_CommPara.uiParity; //校验位
+//
+//		dcb.fBinary = TRUE;// 指定是否允许二进制模式
+//		dcb.fParity = TRUE;// 指定是否允许奇偶校验
+//
+//		//根据设备控制块配置通信设备
+//		if (!SetCommState(m_hComm, &dcb))
+//		{
+//			//AfxMessageBox("串口设置出错！");
+//			m_StatusBar.SetText("串口设置出错！", 2, 0); 
+//			CloseHandle(m_hComm);
+//			return;
+//		}
+//
+//		st_CommPara.bIsCommOpen = TRUE;
+//		m_StatusBar.SetText("串口打开成功", 2, 0);
+//		// 创建线程读取串口数据
+//		//AfxBeginThread(ReadComm, this); //开读串口线程
+//	}
+//	else
+//	{
+//		CloseHandle(m_hComm);
+//		m_hComm = INVALID_HANDLE_VALUE;
+//		st_CommPara.bIsCommOpen = FALSE;
+//	}
+//}
 
 void CPMSRTestDlg::OnBnClickedOk()
 {
@@ -417,19 +471,22 @@ void CPMSRTestDlg::ReadSettings()
 				{
 					//strcpy(temp, strContent.Mid(n+1,l-n-2));
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					st_DataFlag.strCommName = temp; //获取串口号
+					st_CommPara.strCommName = temp; //获取串口号
 					strCOMStatus = temp;
+					CString strcommnum;
+					strcommnum = temp.Mid(3);
+					st_CommPara.uiCommName = atoi(strcommnum);
 				}
 				else if (strContent.Left(n - 1) == _T("BaudRate"))
 				{
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					st_DataFlag.uiBaudRate = atoi(temp); //获取比特率
-					strCOMStatus = strCOMStatus + " " + temp;
+					st_CommPara.uiBaudRate = atoi(temp); //获取比特率
+					strCOMStatus = strCOMStatus + ", " + temp + "bps, N81";
 				}
 				//else if (strContent.Left(n - 1) == _T("ByteSize"))
 				//{
 				//	temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-				//	st_DataFlag.uiByteSize = atoi(temp); //获取数据位
+				//	st_CommPara.uiByteSize = atoi(temp); //获取数据位
 				//	strCOMStatus = strCOMStatus + " " + temp;
 				//}
 				//else if (strContent.Left(n - 1) == _T("StopBits"))
@@ -454,9 +511,12 @@ void CPMSRTestDlg::ReadSettings()
 						AfxMessageBox(_T("set.ini文件中，延时时间设置错误！"), MB_OK);
 					}
 				}
-				m_StatusBar.SetText(strCOMStatus, 1, 0);
+				m_StatusBar.SetText(strCOMStatus, SBPART_COMM, 0);
 			}
 		}
+		st_CommPara.uiByteSize = 8;
+		st_CommPara.uiParity = 'N';
+		st_CommPara.uiStopBits = 0;
 	}
 	else
 	{
@@ -469,16 +529,19 @@ void CPMSRTestDlg::ReadSettings()
 //
 // 状态栏初始化
 //
-//void CPMSRTestDlg::InitStatusBar()
-//{
-//	m_StatusBar.Create(WS_CHILD | WS_VISIBLE | SBT_OWNERDRAW, CRect(0, 0, 0, 0), this, 0);
-//
-//	int strPartDim[6] = {130, 250, 350, 450, 550, -1}; //分割数量，数字为起始位置，不是宽度，-1表示到最右端。
-//	m_StatusBar.SetParts(6, strPartDim);
-//	//下面是在状态栏中加入图标
-//	//m_StatusBar.SetIcon(1,SetIcon(AfxGetApp()->LoadIcon(IDR_MAINFRAME),FALSE));//为第二个分栏中加的图标
-//
-//}
+void CPMSRTestDlg::InitStatusBar()
+{
+	m_StatusBar.SetText("RX:0", SBPART_RCOUNT, 0);
+	m_StatusBar.SetText("TX:0", SBPART_SCOUNT, 0);
+
+	//m_StatusBar.Create(WS_CHILD | WS_VISIBLE | SBT_OWNERDRAW, CRect(0, 0, 0, 0), this, 0);
+
+	//int strPartDim[6] = {130, 250, 350, 450, 550, -1}; //分割数量，数字为起始位置，不是宽度，-1表示到最右端。
+	//m_StatusBar.SetParts(6, strPartDim);
+	////下面是在状态栏中加入图标
+	////m_StatusBar.SetIcon(1,SetIcon(AfxGetApp()->LoadIcon(IDR_MAINFRAME),FALSE));//为第二个分栏中加的图标
+
+}
 
 
 
@@ -493,7 +556,7 @@ void CPMSRTestDlg::ConnectSQLServer()
 	HRESULT hr;
 
 	GetComputerName(ComputerName, &NameSize);//获取计算机名称
-	m_StatusBar.SetText(ComputerName, 5, 0);
+	m_StatusBar.SetText(ComputerName, SBPART_PCNAME, 0);
 	//m_list.InsertString(m_list.GetCount(), ComputerName);
 	//m_list.SetTopIndex(m_list.GetCount() - 1);
 
@@ -604,7 +667,7 @@ void CPMSRTestDlg::OnTimer(UINT_PTR nIDEvent)
 	time.Format(_T("%02d:%02d:%02d"), NowTime.GetHour(), NowTime.GetMinute(), NowTime.GetSecond());
 	date.Format(_T("%04d/%02d/%02d"), NowTime.GetYear(), NowTime.GetMonth(), NowTime.GetDay());
 
-	m_StatusBar.SetText(date + " " + time, 0, 0);
+	m_StatusBar.SetText(date + " " + time, SBPART_TIME, 0);
 
 	CDialogEx::OnTimer(nIDEvent);
 }
@@ -737,14 +800,28 @@ void CPMSRTestDlg::LayoutFrame()
 	uiLeft += uiWidth + 20;
 	m_button_Exit.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
 
+	// ======测试用===========
+#ifdef SHOW_DEBUG
+	uiLeft = RectClient.Width() * 2 / 3;
+	uiTop += 100;
+	uiWidth = RectClient.Width() / 3 - 200;
+	m_edit_ReceiveData.SetWindowPos(this, uiLeft, uiTop, uiWidth, 150, SWP_NOZORDER);
+	m_check_ReceiveHex.SetWindowPos(this, uiLeft + uiWidth + 10, uiTop, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+	m_button_Clear.SetWindowPos(this, uiLeft + uiWidth + 10, uiTop + 30, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+	m_edit_SendData.SetWindowPos(this, uiLeft, uiTop+170, uiWidth, 50, SWP_NOZORDER);
+	m_check_SendHex.SetWindowPos(this, uiLeft + uiWidth + 10, uiTop + 170, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+	m_button_Send.SetWindowPos(this, uiLeft + uiWidth + 10, uiTop + 170 + 30, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+#endif
+	// END======测试用===========
+
 	// 图表
 	m_tchart.SetWindowPos(this, 50, 50, RectClient.Width()*2/3 - 100, RectClient.Height() - 100, SWP_NOZORDER);
 
 	// 状态栏
 	uiWidth = RectClient.Width()/6;
-	int strPartDim[6] = { uiWidth, uiWidth * 2, uiWidth * 3, uiWidth * 4, uiWidth*5, -1 }; //分割数量，数字为起始位置，不是宽度，-1表示到最右端。
-	m_StatusBar.SetParts(6, strPartDim);
-
+	int strPartDim[7] = { uiWidth, uiWidth * 2, uiWidth * 3, uiWidth/2 * 7, uiWidth/2*8, uiWidth * 5, -1 }; //分割数量，数字为起始位置，不是宽度，-1表示到最右端。
+	m_StatusBar.SetParts(7, strPartDim);
+	m_StatusBar.SetWindowPos(0, RectClient.left, RectClient.top, RectClient.Width(), RectClient.Height() - 20, 0);
 }
 
 
@@ -758,7 +835,7 @@ void CPMSRTestDlg::OnSize(UINT nType, int cx, int cy)
 
 	CRect Rect;
 	GetClientRect(&Rect);
-	m_StatusBar.SetWindowPos(0, Rect.left,Rect.top, Rect.Width(), Rect.Height()-20, SWP_NOZORDER);
+	m_StatusBar.SetWindowPos(0, Rect.left,Rect.top, Rect.Width(), Rect.Height()-20, 0);
 }
 
 
@@ -782,3 +859,160 @@ void CPMSRTestDlg::OnGetMinMaxInfo(MINMAXINFO* lpMMI)
 
 	CDialogEx::OnGetMinMaxInfo(lpMMI);
 }
+
+
+
+
+// 通信协议类初始化
+void CPMSRTestDlg::CommandProcessInit()
+{
+	CPInvokeInstance.Init(&CPInvokeInstance, NULL);
+}
+
+
+// 串口接收数据处理
+void CPMSRTestDlg::CommandPress()
+{
+	if (RxLength == 0)
+		return;
+
+	if (!CPInvokeInstance.IsValidProtocol(byRxBuffer, RxLength))
+	{
+		return;
+	}
+
+	BOOL bNeedResponse = FALSE;
+	unsigned int respLength = 0;
+	unsigned char tmpCharValue = 0;
+	unsigned int tmp32;
+
+	bNeedResponse = TRUE;
+	switch (CPInvokeInstance.rcvHeader->cmd)
+	{
+		case 0xF1:
+			break;
+		case 0xF4:
+			break;
+
+		default:
+			bNeedResponse = FALSE;
+			break;
+	}
+
+	if (bNeedResponse)  //如果需要由外部统一给出响应，则调用下面的函数
+	{
+		if (CPInvokeInstance.rcvHeader->flag == 0x99)
+		{
+			CPInvokeInstance.rcvHeader->flag = 0;
+		}
+		CPInvokeInstance.PackProtocol(CPInvokeInstance.rcvHeader, CPInvokeInstance.payload, CPInvokeInstance.payloadLength, byRxBuffer, &respLength);
+		st_CommPara.m_Comm.WriteToPort(byRxBuffer, respLength);
+            //D1InvokeInstance.packD1Protocol(D1InvokeInstance.rcvHeader,\
+            //    D1InvokeInstance.payload, D1InvokeInstance.payloadLength, data, &respLength);\
+            //SendData(dataType, data, respLength);\
+	         
+	}
+
+	RxLength = 0;
+
+}
+
+// 串口类接收消息
+afx_msg LRESULT CPMSRTestDlg::OnCommRxchar(WPARAM ch, LPARAM port)
+{
+	CString str;
+	if (m_check_ReceiveHex.GetCheck())
+	{
+		str.Format("%02X ", ch);
+	}
+	else
+	{
+		str.Format("%c", ch);
+	}
+#ifdef SHOW_DEBUG
+	m_EditLogger.AddText(str);
+	UpdateData(FALSE);
+	m_edit_ReceiveData.LineScroll(m_edit_ReceiveData.GetLineCount());
+#endif
+	st_CommPara.strReceivedData += str;
+	
+	// 把数据保存到缓冲区
+	byRxBuffer[RxLength] = ch;
+	RxLength++;
+
+	st_CommPara.uiBytesReceived++;
+	str.Format("RX:%d", st_CommPara.uiBytesReceived);
+	m_StatusBar.SetText(str, SBPART_RCOUNT, 0);
+
+	return 0;
+}
+
+// 串口类接收检测到break。接收过程中出现多次break
+afx_msg LRESULT CPMSRTestDlg::OnCommBreakDetected(WPARAM wParam, LPARAM lParam)
+{
+#ifdef SHOW_DEBUG
+	m_EditLogger.AddText("$$");
+	UpdateData(FALSE);
+#endif
+	CommandPress();
+
+	return 0;
+}
+
+// 串口类接收到0xAA 测试看不出效果
+afx_msg LRESULT CPMSRTestDlg::OnCommRxflagDetected(WPARAM wParam, LPARAM lParam)
+{
+#ifdef SHOW_DEBUG
+	m_EditLogger.AddText("@@");
+	UpdateData(FALSE);
+#endif
+	return 0;
+}
+
+
+// 清除调试控件
+void CPMSRTestDlg::OnBnClickedButton9()
+{
+	// TODO:  在此添加控件通知处理程序代码
+	st_CommPara.uiBytesReceived = 0;
+	st_CommPara.uiBytesSent = 0;
+	m_StatusBar.SetText("RX:0", SBPART_RCOUNT, 0);
+	m_StatusBar.SetText("TX:0", SBPART_SCOUNT, 0);
+	
+	HWND hEdit = m_edit_ReceiveData;
+	BOOL bReadOnly = ::GetWindowLong(hEdit, GWL_STYLE) & ES_READONLY;
+	if (bReadOnly)
+	{
+		::SendMessage(hEdit, EM_SETREADONLY, FALSE, 0);
+	}
+	::SendMessage(hEdit, EM_SETSEL, 0, -1);
+	::SendMessage(hEdit, WM_CLEAR, 0, 0);
+	if (bReadOnly)
+		::SendMessage(hEdit, EM_SETREADONLY, TRUE, 0);
+
+	RxLength = 0;
+}
+
+
+// 显示或隐藏调试用控件，根据是否有宏定义SHOW_DEBUG确定调试用控件是否显示
+void CPMSRTestDlg::ShowDebugControls()
+{
+#ifdef SHOW_DEBUG
+	m_edit_ReceiveData.ShowWindow(SW_SHOW);
+	m_edit_SendData.ShowWindow(SW_SHOW);
+	m_check_ReceiveHex.ShowWindow(SW_SHOW);
+	m_check_SendHex.ShowWindow(SW_SHOW);
+	m_button_Clear.ShowWindow(SW_SHOW);
+	m_button_Send.ShowWindow(SW_SHOW);
+#else
+	m_edit_ReceiveData.ShowWindow(SW_HIDE );
+	m_edit_SendData.ShowWindow(SW_HIDE );
+	m_check_ReceiveHex.ShowWindow(SW_HIDE );
+	m_check_SendHex.ShowWindow(SW_HIDE );
+	m_button_Clear.ShowWindow(SW_HIDE );
+	m_button_Send.ShowWindow(SW_HIDE ); 
+#endif
+}
+
+
+

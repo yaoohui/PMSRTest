@@ -22,6 +22,7 @@
 #include "SerialPort.h"
 
 #include <assert.h>
+#include <string.h>
 
 int m_nComArray[20];
 //
@@ -160,8 +161,8 @@ BOOL CSerialPort::InitPort(HWND pPortOwner,	// the owner (CWnd) of the port (rec
 	m_dwCommEvents = dwCommEvents;
 
 	BOOL bResult = FALSE;
-	char *szPort = new char[50];
-	char *szBaud = new char[50];
+	CString szPort;
+	//char *szBaud = new char[50];
 
 	
 	/*
@@ -182,7 +183,7 @@ BOOL CSerialPort::InitPort(HWND pPortOwner,	// the owner (CWnd) of the port (rec
 	}
 
 	// prepare port strings
-	sprintf(szPort, "\\\\.\\COM%d", portnr);///可以显示COM10以上端口//add by itas109 2014-01-09
+	szPort.Format("\\\\.\\COM%d", portnr);///可以显示COM10以上端口//add by itas109 2014-01-09
 
 	// stop is index 0 = 1 1=1.5 2=2
 	int mystop;
@@ -219,7 +220,7 @@ BOOL CSerialPort::InitPort(HWND pPortOwner,	// the owner (CWnd) of the port (rec
 			myparity = 4;
 			break;
 	}
-	sprintf(szBaud, "baud=%d parity=%c data=%d stop=%d", baud, parity, databits, mystop);
+	//sprintf(szBaud, "baud=%d parity=%c data=%d stop=%d", baud, parity, databits, mystop);
 
 	// get a handle to the port
 	/*
@@ -245,8 +246,7 @@ BOOL CSerialPort::InitPort(HWND pPortOwner,	// the owner (CWnd) of the port (rec
 	if (m_hComm == INVALID_HANDLE_VALUE)
 	{
 		// port not found
-		delete [] szPort;
-		delete [] szBaud;
+		//delete [] szBaud;
 
 		return FALSE;
 	}
@@ -279,13 +279,15 @@ BOOL CSerialPort::InitPort(HWND pPortOwner,	// the owner (CWnd) of the port (rec
 		{
 			if (GetCommState(m_hComm, &m_dcb))///获取当前DCB参数
 			{
-				m_dcb.EvtChar = 'q';
-				m_dcb.fRtsControl = RTS_CONTROL_ENABLE;		// set RTS bit high!
+				//m_dcb.EvtChar = 'q';
+				//m_dcb.fRtsControl = RTS_CONTROL_ENABLE;		// set RTS bit high!
 				m_dcb.BaudRate = baud;  // add by mrlong
 				m_dcb.Parity   = myparity;
 				m_dcb.ByteSize = databits;
 				m_dcb.StopBits = mystop;
-						
+				m_dcb.fBinary = TRUE;// 指定是否允许二进制模式
+				m_dcb.fParity = TRUE;// 指定是否允许奇偶校验
+				//m_dcb.EvtChar = 'q';
 				//if (BuildCommDCB(szBaud, &m_dcb))///填写DCB结构
 				//{
 					if (SetCommState(m_hComm, &m_dcb))///配置DCB
@@ -305,8 +307,7 @@ BOOL CSerialPort::InitPort(HWND pPortOwner,	// the owner (CWnd) of the port (rec
 	else
 		ProcessErrorMessage("SetCommTimeouts()");
 
-	delete [] szPort;
-	delete [] szBaud;
+	//delete [] szBaud;
 
 	// flush the port
 	///终止读写并清空接收和发送
@@ -554,8 +555,8 @@ BOOL CSerialPort::StopMonitoring()
 //
 void CSerialPort::ProcessErrorMessage(char* ErrorText)
 {
-	char *Temp = new char[200];
-	
+	CString Temp;//char *Temp = new char[200];
+
 	LPVOID lpMsgBuf;
 
 	FormatMessage( 
@@ -568,11 +569,10 @@ void CSerialPort::ProcessErrorMessage(char* ErrorText)
 		NULL 
 	);
 
-	sprintf(Temp, "WARNING:  %s Failed with the following error: \n%s\nPort: %d\n", (char*)ErrorText, lpMsgBuf, m_nPortNr); 
+	Temp.Format("WARNING:  %s Failed with the following error: \n%s\nPort: %d\n", (char*)ErrorText, lpMsgBuf, m_nPortNr);
 	MessageBox(NULL, Temp, "Application Error", MB_ICONSTOP);
 
 	LocalFree(lpMsgBuf);
-	delete[] Temp;
 }
 
 //
@@ -779,7 +779,7 @@ void CSerialPort::WriteToPort(char* string)
 	assert(m_hComm != 0);
 
 	memset(m_szWriteBuffer, 0, sizeof(m_szWriteBuffer));
-	strcpy(m_szWriteBuffer, string);
+	memcpy(m_szWriteBuffer, string, sizeof(string));
 	m_nWriteSize=strlen(string); // add by mrlong
 	// set event for write
 	SetEvent(m_hWriteEvent);
@@ -867,7 +867,7 @@ void CSerialPort::WriteToPort(LPCTSTR string)
 {
 	assert(m_hComm != 0);
 	memset(m_szWriteBuffer, 0, sizeof(m_szWriteBuffer));
-	strcpy(m_szWriteBuffer, string);
+	memcpy(m_szWriteBuffer, string, sizeof(string));
 	m_nWriteSize=strlen(string);
 	// set event for write
 	SetEvent(m_hWriteEvent);
@@ -893,7 +893,7 @@ void CSerialPort::SendData(LPCTSTR lpszData, const int nLength)
 {
 	assert(m_hComm != 0);
 	memset(m_szWriteBuffer, 0, nLength);
-	strcpy(m_szWriteBuffer, lpszData);
+	memcpy(m_szWriteBuffer, lpszData, nLength);
 	m_nWriteSize=nLength;
 	// set event for write
 	SetEvent(m_hWriteEvent);

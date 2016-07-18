@@ -5,6 +5,8 @@
 #pragma once
 #include "afxwin.h"
 #include "tchart1.h"
+#include "SerialPort.h"
+#include "EditLog.h"
 
 class CPMSRTestDlgAutoProxy;
 
@@ -47,7 +49,7 @@ public:
 	afx_msg void OnBnClickedOk();
 	void CPMSRTestDlg::OpenComm();
 	void CPMSRTestDlg::ReadSettings();
-//	void CPMSRTestDlg::InitStatusBar();
+	void CPMSRTestDlg::InitStatusBar();
 	void CPMSRTestDlg::ConnectSQLServer();
 	void CPMSRTestDlg::Initinterface();
 	void CPMSRTestDlg::InitFont();
@@ -87,4 +89,24 @@ public:
 	CButton m_button_Settings;
 	afx_msg void OnGetMinMaxInfo(MINMAXINFO* lpMMI);
 	CButton m_button_Exit;
+	// 通信协议类初始化
+	void CommandProcessInit();
+	// 串口接收数据处理
+	void CommandPress();
+protected:
+	afx_msg LRESULT OnCommRxchar(WPARAM ch, LPARAM port);
+public:
+	CEdit m_edit_ReceiveData;
+	//CEditLog  m_EditLogger;// 属性
+	CButton m_check_ReceiveHex;
+	CButton m_button_Clear;
+	CEdit m_edit_SendData;
+	CButton m_check_SendHex;
+	CButton m_button_Send;
+	afx_msg void OnBnClickedButton9();
+	// 显示或隐藏调试用控件，根据是否有宏定义SHOW_DEBUG确定调试用控件是否显示
+	void ShowDebugControls();
+protected:
+	afx_msg LRESULT OnCommBreakDetected(WPARAM wParam, LPARAM lParam);
+	afx_msg LRESULT OnCommRxflagDetected(WPARAM wParam, LPARAM lParam);
 };

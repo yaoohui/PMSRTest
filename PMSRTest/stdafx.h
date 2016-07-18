@@ -33,7 +33,7 @@
 
 #include <afxcontrolbars.h>     // 功能区和控件条的 MFC 支持
 
-
+#include "SerialPort.h"// 串口类
 
 
 
@@ -65,20 +65,24 @@
 
 #import "C:\Program Files\Common Files\System\ado\msado15.dll" no_namespace rename("BOF","adoBOF") rename("EOF","adoEOF")
 
-
-struct DataFlag
+// 串口相关变量结构体
+struct CommPara
 {
+	CSerialPort m_Comm;
 	BOOL bIsCommOpen = false;	// 串口打开标志
-	UINT uiBytesSent;		// 发送的总字节数
-	UINT uiBytesReceived;	// 接收的总字节数
-	CString strReceivedData;	// 接收的数据
-	USHORT usCommNum;	// 串口数量
 
-	CString strCommName;	// 当前串口号
+	CString strCommName;		// 当前串口号
+	UINT uiCommName;			// 串口号，数值
 	UINT uiBaudRate;
 	UCHAR uiByteSize;
 	UCHAR uiStopBits;
 	UCHAR uiParity;
+
+	UINT uiBytesSent;			// 发送的总字节数
+	UINT uiBytesReceived;		// 接收的总字节数
+	CString strReceivedData;	// 接收的数据
+	CString strSendData;		// 串口发送的数据
+	USHORT usCommNum;			// 串口数量
 };
 
 struct ConfigVal
@@ -86,7 +90,9 @@ struct ConfigVal
 	UINT StartDelay;	// 启动延时时间，单位：ms
 };
 
+#define MODEID	0x17		// 模块ID，串口通讯部分
+
 extern struct ConfigVal st_ConfigData;
-extern struct DataFlag st_DataFlag;
+extern struct CommPara st_CommPara;
 extern CString strIniFileName;
 

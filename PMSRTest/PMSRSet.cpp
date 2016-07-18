@@ -63,7 +63,7 @@ void CPMSRSet::OnBnClickedOk()
 		settingFile.WriteString("//设置参数 Setting Parameter\r\n\r\n");
 		settingFile.WriteString("//端口号\r\n");		
 		m_combo_ComNumSet.GetWindowTextA(str);
-		st_DataFlag.strCommName = str;
+		st_CommPara.strCommName = str;
 		str1.Format("ComNum = %s;\r\n\r\n", str);
 		settingFile.WriteString(str1);
 		
@@ -72,26 +72,26 @@ void CPMSRSet::OnBnClickedOk()
 		if (str == "")
 		{
 			str1.Format("BaudRate = 9600;\r\n\r\n");
-			st_DataFlag.uiBaudRate = 9600;
+			st_CommPara.uiBaudRate = 9600;
 		}
 		else
 		{
 			str1.Format("BaudRate = %s;\r\n\r\n", str);
-			st_DataFlag.uiBaudRate = atoi(str);
+			st_CommPara.uiBaudRate = atoi(str);
 		}
 		settingFile.WriteString(str1);
 
 		settingFile.WriteString("//数据位\r\n");
 		settingFile.WriteString("ByteSize = 8;\r\n\r\n");
-		st_DataFlag.uiByteSize = 8;
+		st_CommPara.uiByteSize = 8;
 
 		settingFile.WriteString("//停止位\r\n");
 		settingFile.WriteString("StopBits = 1;\r\n\r\n");
-		st_DataFlag.uiStopBits = 1;
+		st_CommPara.uiStopBits = 1;
 
 		settingFile.WriteString("//校验\r\n");
 		settingFile.WriteString("Parity = No;\r\n\r\n");
-		st_DataFlag.uiParity = NOPARITY;
+		st_CommPara.uiParity = NOPARITY;
 
 		settingFile.WriteString("//启动延时，单位：秒\r\n");
 		str1.Format("StartDelay = %d;\r\n\r\n", st_ConfigData.StartDelay/1000);
@@ -184,7 +184,7 @@ void CPMSRSet::FindComPort()
 {
 	HKEY   hKey;
 
-	st_DataFlag.usCommNum = 0;	// 串口数量
+	st_CommPara.usCommNum = 0;	// 串口数量
 
 	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("Hardware\\DeviceMap\\SerialComm"), NULL, KEY_READ, &hKey) == ERROR_SUCCESS)
 	{
@@ -202,7 +202,7 @@ void CPMSRSet::FindComPort()
 
 			pCombo->InsertString(nCount, szComName);
 			nCount++;
-			st_DataFlag.usCommNum++;
+			st_CommPara.usCommNum++;
 		}
 		RegCloseKey(hKey);
 		pCombo->SetCurSel(0);

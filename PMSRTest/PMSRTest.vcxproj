@@ -111,26 +111,32 @@
   <ItemGroup>
     <ClInclude Include="CommunicationProtocol.h" />
     <ClInclude Include="DlgProxy.h" />
+    <ClInclude Include="EditLog.h" />
     <ClInclude Include="PMSRSet.h" />
     <ClInclude Include="PMSRTest.h" />
     <ClInclude Include="PMSRTestDlg.h" />
     <ClInclude Include="PMSRType.h" />
     <ClInclude Include="Resource.h" />
+    <ClInclude Include="SerialPort.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="SubclassWnd.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="tchart1.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CommunicationProtocol.cpp" />
     <ClCompile Include="DlgProxy.cpp" />
+    <ClCompile Include="EditLog.cpp" />
     <ClCompile Include="PMSRSet.cpp" />
     <ClCompile Include="PMSRTest.cpp" />
     <ClCompile Include="PMSRTestDlg.cpp" />
     <ClCompile Include="PMSRType.cpp" />
+    <ClCompile Include="SerialPort.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="SubclassWnd.cpp" />
     <ClCompile Include="tchart1.cpp" />
   </ItemGroup>
   <ItemGroup>

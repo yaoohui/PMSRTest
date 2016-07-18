@@ -48,6 +48,15 @@
     <ClInclude Include="CommunicationProtocol.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="EditLog.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="SerialPort.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="SubclassWnd.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PMSRTest.cpp">
@@ -72,6 +81,15 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="CommunicationProtocol.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="SerialPort.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="SubclassWnd.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="EditLog.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
