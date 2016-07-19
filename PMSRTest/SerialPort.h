@@ -107,6 +107,11 @@ public:
 	BOOL RecvData(LPTSTR lpszData, const int nSize);	  //串口接收函数 by mrlong 2008-2-15
 	void QueryKey(HKEY hKey);///查询注册表的串口号，将值存于数组中
 	void Hkey2ComboBox(CComboBox& m_PortNO);///将QueryKey查询到的串口号添加到CComboBox控件中
+	void FindComPort(CComboBox& m_PortNO);// 从注册表中查找可用的串口号
+	void FindComPort(void);
+//增加属性
+	UCHAR m_ComArray[MaxSerialPortNum];
+	int m_ComCount;
 
 protected:
 	// protected memberfunctions

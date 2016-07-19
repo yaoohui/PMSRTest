@@ -50,9 +50,9 @@ void CPMSRSet::OnBnClickedOk()
 	// 启动延时
 	m_edit_SetTimeDelay.GetWindowTextA(str);
 	if (str == "")
-		st_ConfigData.StartDelay = 30 * 1000;
+		st_ConfigData.StartDelay = 30;
 	else
-		st_ConfigData.StartDelay = atoi(str)*1000;
+		st_ConfigData.StartDelay = atoi(str);
 	
 
 	//写文件
@@ -64,6 +64,8 @@ void CPMSRSet::OnBnClickedOk()
 		settingFile.WriteString("//端口号\r\n");		
 		m_combo_ComNumSet.GetWindowTextA(str);
 		st_CommPara.strCommName = str;
+		str1 = str.Mid(3);
+		st_CommPara.uiCommName = atoi(str1);
 		str1.Format("ComNum = %s;\r\n\r\n", str);
 		settingFile.WriteString(str1);
 		
@@ -87,14 +89,14 @@ void CPMSRSet::OnBnClickedOk()
 
 		settingFile.WriteString("//停止位\r\n");
 		settingFile.WriteString("StopBits = 1;\r\n\r\n");
-		st_CommPara.uiStopBits = 1;
+		st_CommPara.uiStopBits = 0;// 注意：停止位为1位时，取值为0
 
 		settingFile.WriteString("//校验\r\n");
 		settingFile.WriteString("Parity = No;\r\n\r\n");
 		st_CommPara.uiParity = NOPARITY;
 
 		settingFile.WriteString("//启动延时，单位：秒\r\n");
-		str1.Format("StartDelay = %d;\r\n\r\n", st_ConfigData.StartDelay/1000);
+		str1.Format("StartDelay = %d;\r\n\r\n", st_ConfigData.StartDelay);
 		settingFile.WriteString(str1);
 	}
 	else
@@ -158,13 +160,13 @@ void CPMSRSet::ReadSettings()
 				else if (strContent.Left(n - 1) == _T("StartDelay"))
 				{
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					st_ConfigData.StartDelay = atoi(temp)*1000; //获取传感器使能设置
-					if ((st_ConfigData.StartDelay < 0) || (st_ConfigData.StartDelay > 90000))
+					st_ConfigData.StartDelay = atoi(temp); //获取传感器使能设置
+					if ((st_ConfigData.StartDelay < 0) || (st_ConfigData.StartDelay > 900))
 					{
-						st_ConfigData.StartDelay = 10000;
+						st_ConfigData.StartDelay = 100;
 						AfxMessageBox(_T("set.ini文件中，延时时间设置错误！"), MB_OK);
 					}
-					temp.Format("%d", st_ConfigData.StartDelay/1000);
+					temp.Format("%d", st_ConfigData.StartDelay);
 					m_edit_SetTimeDelay.SetWindowTextA(temp);
 				}
 			}

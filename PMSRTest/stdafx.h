@@ -72,7 +72,7 @@ struct CommPara
 	BOOL bIsCommOpen = false;	// 串口打开标志
 
 	CString strCommName;		// 当前串口号
-	UINT uiCommName;			// 串口号，数值
+	UCHAR uiCommName;			// 串口号，数值
 	UINT uiBaudRate;
 	UCHAR uiByteSize;
 	UCHAR uiStopBits;
@@ -87,7 +87,11 @@ struct CommPara
 
 struct ConfigVal
 {
-	UINT StartDelay;	// 启动延时时间，单位：ms
+	UINT StartDelay;	// 启动延时时间，单位：s
+	UINT motorlen;		// 电机长度，单位：mm
+	UINT testtimes;		// 试验次数
+	UINT flux;			// 磁通量
+	UINT pole;			// 磁极数
 };
 
 #define MODEID	0x17		// 模块ID，串口通讯部分

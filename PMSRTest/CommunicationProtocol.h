@@ -74,7 +74,10 @@ public:
 	bool ProtocolProcess(unsigned char* pdata, unsigned int length);
 
 	// 通信协议验证
-	bool IsValidProtocol(unsigned char * pdata, unsigned int length);
+	// 成功返回0，长度不足返回1，其他错误返回2
+	unsigned char IsValidProtocol(unsigned char * pdata, unsigned int length);
+	// 填充文件头
+	void HeaderInit(PHeader * pheader);
 
 public:
 	void PackProtocol(PHeader * pheader, unsigned char * payload, unsigned int payloadlength, unsigned char * resultdata, unsigned int * resultlength);
@@ -87,8 +90,7 @@ public:
 	unsigned char* payload;         //有效数据        
 	/*!\brief 有效数据长度 */
 	unsigned short payloadLength;   //有效数据长度  
-private:
-	void HeaderInit(PHeader * pheader);
+
 };
 
 

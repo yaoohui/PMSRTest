@@ -10,14 +10,46 @@
 #include "PMSRSet.h"
 #include "PMSRType.h"
 #include "CommunicationProtocol.h"
+#include "CSeries.h"
+#include "CTChart.h"
+#include "CEnvironment.h"
+#include "CAxes.h"
+#include "CAxis.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
+enum EM_RunState
+{
+	RUNSTATE_IDLE = 0,	// 无
+	RUNSTATE_STOP,		// 停止
+	RUNSTATE_START0,	// 启动被测电机，等待启动延时
+	RUNSTATE_START,		// 
+	RUNSTATE_ROTAING,	// 测量转速
+	RUNSTATE_SAMPLE,	// 采集数据
+};
+enum EM_WaringMode
+{
+	WARNING_NONE = 0,	// 无
+	WARNING_LIMIT,		// 达到限位
+	WARNING_PASS,		// 合格
+	WARNING_NOGOOD,		// 不合格
+};
 //#define MODEID	0x17		// 模块ID，串口通讯部分
 #define MAX_BUFFER_SIZE		2048
 #define ID_STATUS_BAR_CTRL  102	// 状态栏ID
+
+struct FlagDataTypeDef// 标志结构体
+{
+	UCHAR state;		// 运行状态。取值见枚举 EM_RunState
+	UCHAR warningmode;	// 报警类型，01：达到限位，02：合格，03：不合格。取值见枚举 EM_WaringMode
+	FLOAT rotating_speed;// 转速，单位：r/min 转/分钟
+	UCHAR data[MAX_BUFFER_SIZE];			// 采样数据
+	UINT datalen;		// 采样数据长度
+	USHORT steplen;		// 步进电机移动步长，2字节，单位：mm
+	UINT countdowncnt;	// 倒计时计数 
+};
 
 OVERLAPPED osRead;
 OVERLAPPED osShare;
@@ -25,6 +57,8 @@ OVERLAPPED osShare;
 BYTE byRxBuffer[MAX_BUFFER_SIZE];
 UINT RxLength = 0;
 BYTE RxFlag = 0;
+BYTE byTxBuffer[50];
+UINT TxLength = 0;
 
 HANDLE    m_hComm;	// 串口句柄
 UINT ReadComm(LPVOID pParam);
@@ -41,6 +75,7 @@ _ConnectionPtr p_Connection;
 // 全局结构体变量，保存设置的变量
 struct CommPara st_CommPara;
 struct ConfigVal st_ConfigData;
+struct FlagDataTypeDef st_FlagData;
 CString strIniFileName = "set.ini";
 
 CPMSRSet dlgSettings;
@@ -150,6 +185,8 @@ void CPMSRTestDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_EDIT13, m_edit_SendData);
 	DDX_Control(pDX, IDC_CHECK3, m_check_SendHex);
 	DDX_Control(pDX, IDC_BUTTON10, m_button_Send);
+	DDX_Control(pDX, IDC_STATIC_RESULT, m_static_Result);
+	DDX_Control(pDX, IDC_EDIT14, m_edit_Result);
 }
 
 BEGIN_MESSAGE_MAP(CPMSRTestDlg, CDialogEx)
@@ -212,6 +249,8 @@ BOOL CPMSRTestDlg::OnInitDialog()
 
 	LayoutFrame();	// 窗体布局
 	InitStatusBar(); //状态栏初始化
+	InitVariable();	 // 初始化变量
+	st_CommPara.m_Comm.FindComPort();	// 查找可用的串口
 	ReadSettings(); //读取设置
 	OpenComm();//打开串口。必须在读取设置ReadSettings()运行后，再调用
 	ConnectSQLServer();//连接数据库
@@ -221,7 +260,7 @@ BOOL CPMSRTestDlg::OnInitDialog()
 	
 	m_EditLogger.SetEditCtrl(m_edit_ReceiveData.m_hWnd);	// CEditLog类变量关联接收文本框
 
-	CommandProcessInit();
+	
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -322,7 +361,10 @@ void CPMSRTestDlg::OpenComm()
 		{
 			st_CommPara.bIsCommOpen = TRUE;
 			m_StatusBar.SetText("串口打开成功", SBPART_COMM_STATE, 0);
-			//m_EditLogger.SetEditCtrl(m_edit_ReceiveData.m_hWnd);	// CEditLog类变量关联接收文本框
+			CString strCOMStatus;
+			strCOMStatus = st_CommPara.strCommName + ", " + "9600bps, N81";
+			m_StatusBar.SetText(strCOMStatus, SBPART_COMM, 0);
+
 			st_CommPara.m_Comm.StartMonitoring();// 启动串口类监听
 		}
 		else
@@ -455,7 +497,7 @@ void CPMSRTestDlg::ReadSettings()
 	{
 		CString strContent;
 		CString temp;
-		CString strCOMStatus;
+		//CString strCOMStatus;
 
 		while (settingFile.ReadString(strContent))
 		{
@@ -472,16 +514,14 @@ void CPMSRTestDlg::ReadSettings()
 					//strcpy(temp, strContent.Mid(n+1,l-n-2));
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
 					st_CommPara.strCommName = temp; //获取串口号
-					strCOMStatus = temp;
-					CString strcommnum;
-					strcommnum = temp.Mid(3);
-					st_CommPara.uiCommName = atoi(strcommnum);
+					//strCOMStatus = temp;
+					st_CommPara.uiCommName = atoi(temp.Mid(3));
 				}
 				else if (strContent.Left(n - 1) == _T("BaudRate"))
 				{
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
 					st_CommPara.uiBaudRate = atoi(temp); //获取比特率
-					strCOMStatus = strCOMStatus + ", " + temp + "bps, N81";
+					//strCOMStatus = strCOMStatus + ", " + temp + "bps, N81";
 				}
 				//else if (strContent.Left(n - 1) == _T("ByteSize"))
 				//{
@@ -504,14 +544,27 @@ void CPMSRTestDlg::ReadSettings()
 				else if (strContent.Left(n - 1) == _T("TestDelay"))
 				{
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
-					st_ConfigData.StartDelay = atoi(temp)*1000; //获取传感器使能设置
-					if ((st_ConfigData.StartDelay < 0) || (st_ConfigData.StartDelay > 90000))
+					st_ConfigData.StartDelay = atoi(temp); //获取传感器使能设置
+					if ((st_ConfigData.StartDelay < 0) || (st_ConfigData.StartDelay > 900))
 					{
-						st_ConfigData.StartDelay = 10000;
+						st_ConfigData.StartDelay = 100;
 						AfxMessageBox(_T("set.ini文件中，延时时间设置错误！"), MB_OK);
 					}
 				}
-				m_StatusBar.SetText(strCOMStatus, SBPART_COMM, 0);
+				//m_StatusBar.SetText(strCOMStatus, SBPART_COMM, 0);
+			}
+		}
+		// 判断是否正确读取串口号，无效时，更新串口号
+		if (st_CommPara.strCommName == "" || st_CommPara.uiCommName == 0)
+		{
+			if (st_CommPara.m_Comm.m_ComCount > 0)// 注册表中有可用串口
+			{
+				CString str;
+				str.Format("COM%d", st_CommPara.m_Comm.m_ComArray[0]);
+				st_CommPara.strCommName = str;
+				st_CommPara.uiCommName = st_CommPara.m_Comm.m_ComArray[0];
+				st_CommPara.uiBaudRate = 9600;
+				//strCOMStatus = str + ", " + "9600bps, N81";
 			}
 		}
 		st_CommPara.uiByteSize = 8;
@@ -609,12 +662,17 @@ void CPMSRTestDlg::Initinterface()
 
 	p_Recordset->Close();
 }
-
+// 设置 按钮
 void CPMSRTestDlg::OnBnClickedButton1()
 {
 	// TODO:  在此添加控件通知处理程序代码
 	CPMSRSet PMSRSet;
 	PMSRSet.DoModal();
+
+	// 重新设置串口
+	st_CommPara.m_Comm.ClosePort();
+	st_CommPara.bIsCommOpen = FALSE;
+	OpenComm();
 }
 
 
@@ -669,6 +727,14 @@ void CPMSRTestDlg::OnTimer(UINT_PTR nIDEvent)
 
 	m_StatusBar.SetText(date + " " + time, SBPART_TIME, 0);
 
+	// 电机启动延迟时间倒计时
+	if (st_FlagData.state == RUNSTATE_START0)
+	{
+		if (st_FlagData.countdowncnt > 0)
+		{
+			st_FlagData.countdowncnt--;
+		}
+	}
 	CDialogEx::OnTimer(nIDEvent);
 }
 
@@ -685,12 +751,16 @@ void CPMSRTestDlg::InitFont()
 	((CStatic *)GetDlgItem(IDC_STATIC_FLUX))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_STATIC_POLE))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_STATIC_SN))->SetFont(f, TRUE);
-
 	m_combo_type.SetFont(f, TRUE);
 	m_edit_length.SetFont(f, TRUE);
 	m_edit_TestTimes.SetFont(f, TRUE);
 	m_edit_Weight.SetFont(f, TRUE);
-	
+	m_edit_Flux.SetFont(f, TRUE);
+	m_edit_Pole.SetFont(f, TRUE);
+	m_edit_SN.SetFont(f, TRUE);
+	m_edit_Result.SetFont(f, TRUE);
+	m_static_Result.SetFont(f, TRUE);
+
 	((CStatic *)GetDlgItem(IDOK))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_BUTTON1))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_BUTTON2))->SetFont(f, TRUE);
@@ -725,7 +795,7 @@ void CPMSRTestDlg::LayoutFrame()
 	uiLeft = RectClient.Width() * 2 / 3;
 	uiTop = 40;
 	uiWidth = RectClient.Width() / 3 - 20;
-	uiHeight = 220;
+	uiHeight = 200;
 	m_group_Parameter.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
 	
 	// "型号"
@@ -759,9 +829,9 @@ void CPMSRTestDlg::LayoutFrame()
 	// group"测试结果"
 	m_group_Parameter.GetWindowRect(&RectTemp);
 	uiLeft = RectClient.Width() * 2 / 3;
-	uiTop = RectTemp.bottom + 10;//uiHeight + 50;
+	uiTop = RectTemp.bottom + 6;//uiHeight + 50;
 	uiWidth = RectTemp.Width();//RectClient.Width() / 3 - 20;
-	uiHeight = 170;
+	uiHeight = 200;
 	m_group_Result.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
 
 	// "转子编号"
@@ -776,12 +846,16 @@ void CPMSRTestDlg::LayoutFrame()
 	m_static_Weight.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 	m_static_Weight.GetClientRect(&RectTemp);
 	m_edit_Weight.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-
+	// "测试结果"
+	uiTop += 50;
+	m_static_Result.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_Result.GetClientRect(&RectTemp);
+	m_edit_Result.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 
 	// 按钮
 	m_group_Result.GetWindowRect(&RectTemp);
 	uiLeft = RectClient.Width() * 2 / 3;
-	uiTop = RectTemp.bottom + 50;
+	uiTop = RectTemp.bottom + 10;
 	uiWidth = 88; uiHeight = 80;
 	m_button_Keyboard.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
 	uiLeft += uiWidth + 20;
@@ -805,12 +879,12 @@ void CPMSRTestDlg::LayoutFrame()
 	uiLeft = RectClient.Width() * 2 / 3;
 	uiTop += 100;
 	uiWidth = RectClient.Width() / 3 - 200;
-	m_edit_ReceiveData.SetWindowPos(this, uiLeft, uiTop, uiWidth, 150, SWP_NOZORDER);
+	m_edit_ReceiveData.SetWindowPos(this, uiLeft, uiTop, uiWidth, 50, SWP_NOZORDER);
 	m_check_ReceiveHex.SetWindowPos(this, uiLeft + uiWidth + 10, uiTop, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 	m_button_Clear.SetWindowPos(this, uiLeft + uiWidth + 10, uiTop + 30, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-	m_edit_SendData.SetWindowPos(this, uiLeft, uiTop+170, uiWidth, 50, SWP_NOZORDER);
-	m_check_SendHex.SetWindowPos(this, uiLeft + uiWidth + 10, uiTop + 170, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-	m_button_Send.SetWindowPos(this, uiLeft + uiWidth + 10, uiTop + 170 + 30, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+	m_edit_SendData.SetWindowPos(this, uiLeft, uiTop+60, uiWidth, 20, SWP_NOZORDER);
+	m_check_SendHex.SetWindowPos(this, uiLeft + uiWidth + 10, uiTop + 60, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+	m_button_Send.SetWindowPos(this, uiLeft + uiWidth + 60, uiTop + 60, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
 #endif
 	// END======测试用===========
 
@@ -866,18 +940,32 @@ void CPMSRTestDlg::OnGetMinMaxInfo(MINMAXINFO* lpMMI)
 // 通信协议类初始化
 void CPMSRTestDlg::CommandProcessInit()
 {
-	CPInvokeInstance.Init(&CPInvokeInstance, NULL);
+	CPInvokeInstance.Init(&CPInvokeInstance, NULL);// 用于通信协议关联实例
 }
 
 
 // 串口接收数据处理
 void CPMSRTestDlg::CommandPress()
 {
+	UCHAR verfy;
+
 	if (RxLength == 0)
 		return;
 
-	if (!CPInvokeInstance.IsValidProtocol(byRxBuffer, RxLength))
+	verfy = CPInvokeInstance.IsValidProtocol(byRxBuffer, RxLength);
+	if (verfy == 1)//长度不足
 	{
+		return;
+	}
+	else if (verfy > 1)// 其他错误
+	{
+		RxLength = 0;
+		return;
+	}
+
+	if (CPInvokeInstance.rcvHeader->modeid != MODEID)	// 模块编号错误，返回
+	{
+		RxLength = 0;
 		return;
 	}
 
@@ -889,9 +977,42 @@ void CPMSRTestDlg::CommandPress()
 	bNeedResponse = TRUE;
 	switch (CPInvokeInstance.rcvHeader->cmd)
 	{
-		case 0xF1:
+		case 0xF1://启动被测电机，计算步进电机移动步长
+			bNeedResponse = FALSE;
+			// 发送启动被测电机指令
+			CPInvokeInstance.rcvHeader->cmd = 0xF8;
+			CPInvokeInstance.PackProtocol(CPInvokeInstance.rcvHeader, CPInvokeInstance.payload, CPInvokeInstance.payloadLength, byRxBuffer, &respLength);
+			st_CommPara.m_Comm.WriteToPort(byRxBuffer, respLength);
+
+			st_FlagData.state = RUNSTATE_START0;	// 启动被测电机，开始计时，延时设定时长后，发送步进电机移动命令
+			st_FlagData.countdowncnt = st_ConfigData.StartDelay;
+			ReadParameters();// 读取设置参数
+			// 创建流程处理线程
+			AfxBeginThread(FlowProcessThread, this);
 			break;
-		case 0xF4:
+
+		case 0xF3:// 报警
+			if (CPInvokeInstance.payload[0] == WARNING_LIMIT)// 达到右限位
+				st_FlagData.warningmode = WARNING_LIMIT;
+			break;
+
+		case 0xF2:// 停止
+			st_FlagData.state = RUNSTATE_STOP;
+			break;
+
+		case 0xF4:// 转速
+			bNeedResponse = FALSE;
+			st_FlagData.rotating_speed = (FLOAT)(*(USHORT*)CPInvokeInstance.payload) / 10.0;
+			st_FlagData.state = RUNSTATE_ROTAING;
+			break;
+		
+		case 0xF5:// 采集数据
+			bNeedResponse = FALSE;
+			st_FlagData.datalen = CPInvokeInstance.rcvHeader->len;
+			memcpy(st_FlagData.data, CPInvokeInstance.payload, st_FlagData.datalen);
+			st_FlagData.state = RUNSTATE_SAMPLE;
+			//if (st_FlagData.datalen > 0)	// 有数据时，显示波形
+			//	ShowWave();
 			break;
 
 		default:
@@ -901,16 +1022,8 @@ void CPMSRTestDlg::CommandPress()
 
 	if (bNeedResponse)  //如果需要由外部统一给出响应，则调用下面的函数
 	{
-		if (CPInvokeInstance.rcvHeader->flag == 0x99)
-		{
-			CPInvokeInstance.rcvHeader->flag = 0;
-		}
-		CPInvokeInstance.PackProtocol(CPInvokeInstance.rcvHeader, CPInvokeInstance.payload, CPInvokeInstance.payloadLength, byRxBuffer, &respLength);
+		CPInvokeInstance.PackResponse(CPInvokeInstance.rcvHeader, CPInvokeInstance.payload, CPInvokeInstance.payloadLength, byRxBuffer, &respLength);
 		st_CommPara.m_Comm.WriteToPort(byRxBuffer, respLength);
-            //D1InvokeInstance.packD1Protocol(D1InvokeInstance.rcvHeader,\
-            //    D1InvokeInstance.payload, D1InvokeInstance.payloadLength, data, &respLength);\
-            //SendData(dataType, data, respLength);\
-	         
 	}
 
 	RxLength = 0;
@@ -991,6 +1104,11 @@ void CPMSRTestDlg::OnBnClickedButton9()
 		::SendMessage(hEdit, EM_SETREADONLY, TRUE, 0);
 
 	RxLength = 0;
+
+	// 清除图表
+	CSeries LineSeries1 = m_tchart.Series(0);// 直线序列
+	LineSeries1.Clear();	// 清空数据
+
 }
 
 
@@ -1015,4 +1133,160 @@ void CPMSRTestDlg::ShowDebugControls()
 }
 
 
+// 在图表tchart上显示波形
+void CPMSRTestDlg::ShowWave()
+{
+	CSeries LineSeries1 = m_tchart.Series(0);// 直线序列
+	CSeries SurfaceSeries = m_tchart.Series(1);// surface序列
+	UINT i;
 
+	LineSeries1.Clear();	// 清空数据
+	SurfaceSeries.Clear();
+	for (i = 0; i < st_FlagData.datalen; i++)
+	{
+		LineSeries1.AddXY(i, st_FlagData.data[i], 0, RGB(255, 0, 0));
+		SurfaceSeries.AddXY(i, st_FlagData.data[i], 0, RGB(255, 0, 0));
+	}
+
+}
+
+
+// 图表tchart控件初始化
+void CPMSRTestDlg::TChartInit()
+{
+	// 禁止鼠标滚轮
+	CEnvironment env = m_tchart.get_Environment();
+	env.put_MouseWheelScroll(false);
+	// 坐标轴初始化
+	CAxes axes = m_tchart.get_Axis();
+	CAxis leftAxis = (CAxis)axes.get_Left();
+	CAxis bottomAxis = (CAxis)axes.get_Bottom();
+	leftAxis.put_Visible(TRUE);
+	leftAxis.put_Automatic(FALSE);
+	leftAxis.put_Maximum(256);// 纵坐标最大值
+	leftAxis.put_Minimum(0);
+	leftAxis.put_Increment(10);
+	bottomAxis.put_Automatic(FALSE);
+	bottomAxis.put_Maximum(401);// 横坐标最大值
+	bottomAxis.put_Minimum(0);
+	bottomAxis.put_Increment(1);
+
+	m_tchart.SetFocus();
+}
+
+
+// 初始化变量
+void CPMSRTestDlg::InitVariable()
+{
+	// 全局变量初始化
+	st_FlagData.warningmode = WARNING_NONE;
+	st_FlagData.state = RUNSTATE_IDLE;
+	st_FlagData.rotating_speed = 0;
+	memset(st_FlagData.data, MAX_BUFFER_SIZE, 0);
+	st_FlagData.datalen = 0;
+	st_FlagData.steplen = 0;
+	st_FlagData.countdowncnt = 0;
+
+	st_CommPara.bIsCommOpen = FALSE;
+	st_CommPara.strReceivedData = "";
+	st_CommPara.uiBytesReceived = 0;
+	st_CommPara.uiBytesSent = 0;
+	st_CommPara.usCommNum = 0;
+
+	// 通信协议类初始化
+	CommandProcessInit();
+
+	// 控件初始化
+	m_edit_Flux.SetWindowTextA("");
+}
+
+
+// 读取界面设置的参数，保存到全局变量中
+int CPMSRTestDlg::ReadParameters()
+{
+	CString str;
+	UINT i;
+
+	UpdateData(TRUE);
+
+	m_edit_Flux.GetWindowTextA(str);
+	i = atoi(str);
+	st_ConfigData.flux = i;
+	// TODO:如果超范围，则设定默认值
+	// ....
+
+	m_edit_length.GetWindowTextA(str);
+	i = atoi(str);
+	st_ConfigData.motorlen = i;
+	// TODO:如果超范围，则设定默认值
+	// ....
+
+	m_edit_Pole.GetWindowTextA(str);
+	i = atoi(str);
+	st_ConfigData.pole = i;
+	// TODO:如果超范围，则设定默认值
+	// ....
+
+	m_edit_TestTimes.GetWindowTextA(str);
+	i = atoi(str);
+	st_ConfigData.testtimes = i;
+	// TODO:如果超范围，则设定默认值
+	// ....
+
+	return 0;
+}
+
+
+// 流程控制线程
+UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
+{
+	CPMSRTestDlg* dlg = (CPMSRTestDlg*)pParam;
+
+	while (1)
+	{
+		switch (st_FlagData.state)
+		{
+			// 电机启动延迟时间倒计时
+			case RUNSTATE_START0:
+			{
+				if (st_FlagData.countdowncnt == 0)	// 延迟时间到
+				{
+					st_FlagData.state = RUNSTATE_ROTAING;
+
+					// 发送步进电机移动步长
+					st_FlagData.steplen = st_ConfigData.motorlen / (st_ConfigData.testtimes + 1);
+					PHeader header;
+					UINT respLength = 0;
+					CPInvokeInstance.HeaderInit(&header);
+					header.cmd = 0xF1;
+					header.len = 2;
+					CPInvokeInstance.PackProtocol(&header, (UCHAR*)&st_FlagData.steplen, 2, byTxBuffer, &respLength);
+					st_CommPara.m_Comm.WriteToPort(byTxBuffer, respLength);
+
+					st_FlagData.state = RUNSTATE_START;
+				}
+			}
+			break;
+
+			// 获得转速
+			case RUNSTATE_ROTAING:
+			{
+
+			}
+			break;
+
+			// 获得采样数据
+			case RUNSTATE_SAMPLE:
+			{
+				if (st_FlagData.datalen > 0)	// 有数据时，显示波形
+					dlg->ShowWave();
+				st_FlagData.state = RUNSTATE_START;
+			}
+			break;
+		}
+
+
+	}
+
+	return 0;
+}

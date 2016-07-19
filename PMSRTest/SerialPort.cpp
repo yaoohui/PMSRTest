@@ -24,7 +24,7 @@
 #include <assert.h>
 #include <string.h>
 
-int m_nComArray[20];
+int m_nComArray[MaxSerialPortNum];
 //
 // Constructor
 //
@@ -1015,4 +1015,66 @@ void CSerialPort::Hkey2ComboBox(CComboBox& m_PortNO)
 			m_PortNO.SetCurSel(0);
 	}
 	
+}
+
+// 查找串口
+void CSerialPort::FindComPort(CComboBox& m_PortNO)
+{
+	HKEY   hKey;
+	UINT i;
+
+	for (i = 0; i<MaxSerialPortNum; i++)///存放串口号的数组初始化
+	{
+		m_ComArray[i] = -1;
+	}
+
+	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("Hardware\\DeviceMap\\SerialComm"), NULL, KEY_READ, &hKey) == ERROR_SUCCESS)
+	{
+		TCHAR       szPortName[256], szComName[256];
+		DWORD       dwLong, dwSize;
+		
+		m_ComCount = 0;
+		m_PortNO.ResetContent();///刷新时，清空下拉列表内容
+		while (true)
+		{
+			dwLong = dwSize = 256;
+			if (RegEnumValue(hKey, m_ComCount, szPortName, &dwLong, NULL, NULL, (PUCHAR)szComName, &dwSize) == ERROR_NO_MORE_ITEMS)
+				break;
+
+			m_PortNO.InsertString(m_ComCount, szComName);
+			m_ComArray[m_ComCount] = atoi((char*)(szComName + 3));
+			m_ComCount++;
+		}
+		RegCloseKey(hKey);
+		m_PortNO.SetCurSel(0);
+	}
+
+}
+void CSerialPort::FindComPort(void)
+{
+	HKEY   hKey;
+	UINT i;
+
+	for (i = 0; i<MaxSerialPortNum; i++)///存放串口号的数组初始化
+	{
+		m_ComArray[i] = -1;
+	}
+
+	if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, _T("Hardware\\DeviceMap\\SerialComm"), NULL, KEY_READ, &hKey) == ERROR_SUCCESS)
+	{
+		TCHAR       szPortName[256], szComName[256];
+		DWORD       dwLong, dwSize;
+
+		m_ComCount = 0;
+		while (true)
+		{
+			dwLong = dwSize = 256;
+			if (RegEnumValue(hKey, m_ComCount, szPortName, &dwLong, NULL, NULL, (PUCHAR)szComName, &dwSize) == ERROR_NO_MORE_ITEMS)
+				break;
+
+			m_ComArray[m_ComCount] = atoi((char*)(szComName + 3));
+			m_ComCount++;
+		}
+		RegCloseKey(hKey);
+	}
 }

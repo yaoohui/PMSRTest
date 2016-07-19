@@ -109,4 +109,19 @@ public:
 protected:
 	afx_msg LRESULT OnCommBreakDetected(WPARAM wParam, LPARAM lParam);
 	afx_msg LRESULT OnCommRxflagDetected(WPARAM wParam, LPARAM lParam);
+public:
+	// 在图表tchart上显示波形
+	void ShowWave();
+	// 图表tchart控件初始化
+	void TChartInit();
+	// 初始化变量
+	void InitVariable();
+private:
+	// 读取界面设置的参数，保存到全局变量中
+	int ReadParameters();
+public:
+	CStatic m_static_Result;
+	CEdit m_edit_Result;
+	// 流程控制线程
+	static UINT FlowProcessThread(LPVOID pParam);// 注意线程需要定义成全局函数或者类的静态成员函数
 };

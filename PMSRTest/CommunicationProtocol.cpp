@@ -29,47 +29,49 @@ void CommunicationProtocol::Init(CommunicationProtocol*  d1Invoke, void(*cmdProc
 
 
 // 通信协议验证
-bool CommunicationProtocol::IsValidProtocol(unsigned char * pdata, unsigned int length)
+// 成功返回0，长度不足返回1，其他错误返回2
+unsigned char CommunicationProtocol::IsValidProtocol(unsigned char * pdata, unsigned int length)
 {
-	bool result = false;
 	unsigned char crc;
 	unsigned short len;
 
 	if (length < sizeof(PHeader) + CRC_LENGTH)	// 长度不足
-		return result;
+		return 1;
 
-	len = ((unsigned short)pdata[4] << 8) + pdata[5];
+	//len = ((unsigned short)pdata[4] << 8) + pdata[5];
+	len = ((PHeader*)pdata)->len;
 	if (len + CRC_LENGTH + sizeof(PHeader) != length)	// 长度错误
-		return result;
+		return 2;
+
+	if (((PHeader*)pdata)->prefix != 0xAA || ((PHeader*)pdata)->flag != 0x99)
+		return 2;
 
 	crc = XOR(pdata, length - CRC_LENGTH);
 	if (crc != pdata[length - 1])
 	{
-		result = false;
-		return result;
+		return 2;
 	}
 	s_d1Instance->rcvHeader = (PHeader*)pdata;
 	s_d1Instance->payload = pdata + sizeof(PHeader);
 	s_d1Instance->payloadLength = len;
-	result = true;
-	return result;
+	return 0;
 }
 
 
 // 通信协议校验并处理
 bool CommunicationProtocol::ProtocolProcess(unsigned char* pdata, unsigned int length)
 {
-	bool result = false;
+	unsigned char result = false;
 
 	result = IsValidProtocol(pdata, length);
-	if (!result)
-		return result;
+	if (result)
+		return false;
 
 	if (s_D1Inovke_cmdProcess != NULL)
 	{
 		s_D1Inovke_cmdProcess(s_d1Instance->rcvHeader, s_d1Instance->payload, s_d1Instance->payloadLength);
 	}
-	return 0;
+	return true;
 }
 
 
