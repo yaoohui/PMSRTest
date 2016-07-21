@@ -79,8 +79,8 @@ void CommunicationProtocol::PackProtocol(PHeader * pheader, unsigned char * payl
 {
 	unsigned char crc = 0;
 
-	pheader->len = payloadLength;
-	*resultlength = payloadLength + sizeof(PHeader) + CRC_LENGTH;
+	pheader->len = payloadlength;
+	*resultlength = payloadlength + sizeof(PHeader) + CRC_LENGTH;
 
 	memcpy(resultdata, pheader, sizeof(*(pheader)));
 	memcpy(resultdata + sizeof(*(pheader)), payload, payloadlength);

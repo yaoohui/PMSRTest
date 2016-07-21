@@ -15,6 +15,7 @@
 #include "CEnvironment.h"
 #include "CAxes.h"
 #include "CAxis.h"
+#include "DlgWaiting.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -81,6 +82,7 @@ CString strIniFileName = "set.ini";
 CPMSRSet dlgSettings;
 CommunicationProtocol CPInvokeInstance;// 通信协议对象
 CEditLog  m_EditLogger;// 用于显示接收数据的实例
+CDlgWaiting *DlgWaiting = new CDlgWaiting;// 等待被测电机转速稳定倒计时界面
 
 //状态栏分块名称
 enum EM_StatusBarParts
@@ -208,6 +210,7 @@ ON_MESSAGE(WM_COMM_RXCHAR, &CPMSRTestDlg::OnCommRxchar)
 ON_BN_CLICKED(IDC_BUTTON9, &CPMSRTestDlg::OnBnClickedButton9)
 ON_MESSAGE(WM_COMM_BREAK_DETECTED, &CPMSRTestDlg::OnCommBreakDetected)
 ON_MESSAGE(WM_COMM_RXFLAG_DETECTED, &CPMSRTestDlg::OnCommRxflagDetected)
+ON_MESSAGE(WM_WAITCOUNTDOWN, &CPMSRTestDlg::OnWaitcountdown)
 END_MESSAGE_MAP()
 
 
@@ -246,6 +249,8 @@ BOOL CPMSRTestDlg::OnInitDialog()
 	CWnd::SetWindowPos(NULL, 0, 0, 1350, 850, SWP_NOZORDER | SWP_NOMOVE);// 窗体初始大小
 	ShowWindow(SW_MAXIMIZE);
 	ShowDebugControls();// 调试控件显示/不显示
+	m_check_ReceiveHex.SetCheck(BST_CHECKED);
+	m_check_SendHex.SetCheck(BST_CHECKED);
 
 	LayoutFrame();	// 窗体布局
 	InitStatusBar(); //状态栏初始化
@@ -566,6 +571,7 @@ void CPMSRTestDlg::ReadSettings()
 				st_CommPara.uiBaudRate = 9600;
 				//strCOMStatus = str + ", " + "9600bps, N81";
 			}
+			st_ConfigData.StartDelay = 100;
 		}
 		st_CommPara.uiByteSize = 8;
 		st_CommPara.uiParity = 'N';
@@ -733,6 +739,8 @@ void CPMSRTestDlg::OnTimer(UINT_PTR nIDEvent)
 		if (st_FlagData.countdowncnt > 0)
 		{
 			st_FlagData.countdowncnt--;
+			//DlgWaiting.SendMessage(WM_WAITCOUNTDOWN, st_FlagData.countdowncnt, 0);
+			::SendMessage(DlgWaiting->GetSafeHwnd(), WM_WAITCOUNTDOWN, st_FlagData.countdowncnt, 0);
 		}
 	}
 	CDialogEx::OnTimer(nIDEvent);
@@ -979,16 +987,25 @@ void CPMSRTestDlg::CommandPress()
 	{
 		case 0xF1://启动被测电机，计算步进电机移动步长
 			bNeedResponse = FALSE;
-			// 发送启动被测电机指令
-			CPInvokeInstance.rcvHeader->cmd = 0xF8;
-			CPInvokeInstance.PackProtocol(CPInvokeInstance.rcvHeader, CPInvokeInstance.payload, CPInvokeInstance.payloadLength, byRxBuffer, &respLength);
-			st_CommPara.m_Comm.WriteToPort(byRxBuffer, respLength);
+			if (!ReadParameters())// 读取设置参数成功
+			{
+				// 发送启动被测电机指令
+				CPInvokeInstance.rcvHeader->cmd = 0xF8;
+				CPInvokeInstance.PackProtocol(CPInvokeInstance.rcvHeader, CPInvokeInstance.payload, CPInvokeInstance.payloadLength, byRxBuffer, &respLength);
+				st_CommPara.m_Comm.WriteToPort(byRxBuffer, respLength);
 
-			st_FlagData.state = RUNSTATE_START0;	// 启动被测电机，开始计时，延时设定时长后，发送步进电机移动命令
-			st_FlagData.countdowncnt = st_ConfigData.StartDelay;
-			ReadParameters();// 读取设置参数
-			// 创建流程处理线程
-			AfxBeginThread(FlowProcessThread, this);
+				st_FlagData.countdowncnt = st_ConfigData.StartDelay;
+				// 显示倒计时界面
+				DlgWaiting->Create(IDD_DLG_COUNTDOWN);
+				DlgWaiting->ShowWindow(SW_SHOW);
+				st_FlagData.state = RUNSTATE_START0;	// 启动被测电机，开始计时，延时设定时长后，发送步进电机移动命令
+				// 创建流程处理线程
+				AfxBeginThread(FlowProcessThread, this);
+			}
+			else// 读取失败
+			{
+				AfxMessageBox("参数未设置！\r\n请按下停止按钮，设置完整参数后，再按下启动。", MB_OK | MB_ICONEXCLAMATION);
+			}
 			break;
 
 		case 0xF3:// 报警
@@ -1202,38 +1219,48 @@ void CPMSRTestDlg::InitVariable()
 
 
 // 读取界面设置的参数，保存到全局变量中
+// 成功返回0，失败返回1
 int CPMSRTestDlg::ReadParameters()
 {
 	CString str;
 	UINT i;
+	int result = 0;
 
 	UpdateData(TRUE);
 
 	m_edit_Flux.GetWindowTextA(str);
 	i = atoi(str);
 	st_ConfigData.flux = i;
+	if (st_ConfigData.flux == 0)
+		result |= 1;
 	// TODO:如果超范围，则设定默认值
 	// ....
 
 	m_edit_length.GetWindowTextA(str);
 	i = atoi(str);
 	st_ConfigData.motorlen = i;
+	if (st_ConfigData.motorlen == 0)
+		result |= 2;
 	// TODO:如果超范围，则设定默认值
 	// ....
 
 	m_edit_Pole.GetWindowTextA(str);
 	i = atoi(str);
 	st_ConfigData.pole = i;
+	if (st_ConfigData.pole == 0)
+		result |= 4;
 	// TODO:如果超范围，则设定默认值
 	// ....
 
 	m_edit_TestTimes.GetWindowTextA(str);
 	i = atoi(str);
 	st_ConfigData.testtimes = i;
+	if (st_ConfigData.testtimes == 0)
+		result |= 8;
 	// TODO:如果超范围，则设定默认值
 	// ....
 
-	return 0;
+	return result;
 }
 
 
@@ -1251,6 +1278,8 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 			{
 				if (st_FlagData.countdowncnt == 0)	// 延迟时间到
 				{
+					::SendMessage(DlgWaiting->GetSafeHwnd(), WM_CLOSE,0,0);
+
 					st_FlagData.state = RUNSTATE_ROTAING;
 
 					// 发送步进电机移动步长
@@ -1288,5 +1317,20 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 
 	}
 
+	return 0;
+}
+
+// 等待被测电机转速稳定消息
+afx_msg LRESULT CPMSRTestDlg::OnWaitcountdown(WPARAM wParam, LPARAM lParam)
+{
+	int countdown = wParam;
+	CString str;
+	str.Format("%d", countdown);
+
+	if(DlgWaiting)
+	{
+		DlgWaiting->m_static_countdown.SetWindowTextA(str);
+		UpdateData(FALSE);
+	}
 	return 0;
 }

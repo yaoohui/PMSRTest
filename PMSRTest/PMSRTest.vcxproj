@@ -117,6 +117,7 @@
     <ClInclude Include="CTChart.h" />
     <ClInclude Include="CTools.h" />
     <ClInclude Include="DlgProxy.h" />
+    <ClInclude Include="DlgWaiting.h" />
     <ClInclude Include="EditLog.h" />
     <ClInclude Include="PMSRSet.h" />
     <ClInclude Include="PMSRTest.h" />
@@ -132,6 +133,7 @@
   <ItemGroup>
     <ClCompile Include="CommunicationProtocol.cpp" />
     <ClCompile Include="DlgProxy.cpp" />
+    <ClCompile Include="DlgWaiting.cpp" />
     <ClCompile Include="EditLog.cpp" />
     <ClCompile Include="PMSRSet.cpp" />
     <ClCompile Include="PMSRTest.cpp" />

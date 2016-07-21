@@ -8,6 +8,10 @@
 #include "SerialPort.h"
 #include "EditLog.h"
 
+// 自定义消息
+#define WM_WAITCOUNTDOWN (WM_USER + 1000)
+
+
 class CPMSRTestDlgAutoProxy;
 
 
@@ -118,10 +122,13 @@ public:
 	void InitVariable();
 private:
 	// 读取界面设置的参数，保存到全局变量中
+	// 成功返回0，失败返回1
 	int ReadParameters();
 public:
 	CStatic m_static_Result;
 	CEdit m_edit_Result;
 	// 流程控制线程
 	static UINT FlowProcessThread(LPVOID pParam);// 注意线程需要定义成全局函数或者类的静态成员函数
+protected:
+	afx_msg LRESULT OnWaitcountdown(WPARAM wParam, LPARAM lParam);
 };
