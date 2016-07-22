@@ -24,4 +24,8 @@ protected:
 public:
 	CStatic m_static_countdown;
 	virtual BOOL OnInitDialog();
+protected:
+	afx_msg LRESULT OnWaitcountdown(WPARAM wParam, LPARAM lParam);
+public:
+	afx_msg void OnBnClickedButton1();
 };

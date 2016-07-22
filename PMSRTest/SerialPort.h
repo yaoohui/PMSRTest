@@ -161,6 +161,9 @@ protected:
 	DWORD				m_nWriteBufferSize;///写缓冲大小
 
 	int				 m_nWriteSize;//写入字节数 //add by mrlong 2007-12-25
+public:
+	// 把字符串转成数组，返回字节数
+	int String2Hex(CString srcstr, BYTE* hexdata);
 };
 
 #endif __SERIALPORT_H__

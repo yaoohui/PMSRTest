@@ -10,6 +10,10 @@
 
 #include "resource.h"		// 主符号
 
+// 自定义消息
+#define WM_WAITCOUNTDOWN		(WM_USER + 1000)// 倒计时窗体消息
+#define WM_ENABLESETCONTROLS	(WM_USER + 1001)// 主界面窗体消息
+#define WM_DELETEDLGCOUNTDOWN	(WM_USER + 1002)// 主界面窗体消息--删除对象
 
 // CPMSRTestApp: 
 // 有关此类的实现，请参阅 PMSRTest.cpp

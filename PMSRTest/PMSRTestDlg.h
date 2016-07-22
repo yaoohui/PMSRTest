@@ -7,9 +7,8 @@
 #include "tchart1.h"
 #include "SerialPort.h"
 #include "EditLog.h"
+#include "DlgWaiting.h"
 
-// 自定义消息
-#define WM_WAITCOUNTDOWN (WM_USER + 1000)
 
 
 class CPMSRTestDlgAutoProxy;
@@ -124,11 +123,27 @@ private:
 	// 读取界面设置的参数，保存到全局变量中
 	// 成功返回0，失败返回1
 	int ReadParameters();
+
+//	CDlgWaiting *DlgWaiting;
+// 等待被测电机转速稳定倒计时界面
 public:
 	CStatic m_static_Result;
 	CEdit m_edit_Result;
 	// 流程控制线程
 	static UINT FlowProcessThread(LPVOID pParam);// 注意线程需要定义成全局函数或者类的静态成员函数
 protected:
-	afx_msg LRESULT OnWaitcountdown(WPARAM wParam, LPARAM lParam);
+//	afx_msg LRESULT OnWaitcountdown(WPARAM wParam, LPARAM lParam);
+private:
+	CDlgWaiting* DlgWaiting;
+public:
+	afx_msg void OnBnClickedButton10();
+	// 使能或禁止设置参数控件的输入
+//	int EnableSettings(bool bEnable);
+protected:
+	afx_msg LRESULT OnEnablesetcontrols(WPARAM wParam, LPARAM lParam);
+public:
+	// 向下位机发送步进电机移动距离
+	void SendStepLength();
+protected:
+	afx_msg LRESULT OnDeletedlgcountdown(WPARAM wParam, LPARAM lParam);
 };

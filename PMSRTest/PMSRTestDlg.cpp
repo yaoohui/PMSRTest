@@ -15,7 +15,6 @@
 #include "CEnvironment.h"
 #include "CAxes.h"
 #include "CAxis.h"
-#include "DlgWaiting.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -52,17 +51,15 @@ struct FlagDataTypeDef// 标志结构体
 	UINT countdowncnt;	// 倒计时计数 
 };
 
-OVERLAPPED osRead;
-OVERLAPPED osShare;
 
 BYTE byRxBuffer[MAX_BUFFER_SIZE];
 UINT RxLength = 0;
 BYTE RxFlag = 0;
-BYTE byTxBuffer[50];
+BYTE byTxBuffer[MAX_BUFFER_SIZE];
 UINT TxLength = 0;
 
-HANDLE    m_hComm;	// 串口句柄
-UINT ReadComm(LPVOID pParam);
+//HANDLE    m_hComm;	// 串口句柄
+//UINT ReadComm(LPVOID pParam);
 
 //UINT TestDelay;//开始测试延时
 //CString ComNum;//串口端口号
@@ -82,7 +79,6 @@ CString strIniFileName = "set.ini";
 CPMSRSet dlgSettings;
 CommunicationProtocol CPInvokeInstance;// 通信协议对象
 CEditLog  m_EditLogger;// 用于显示接收数据的实例
-CDlgWaiting *DlgWaiting = new CDlgWaiting;// 等待被测电机转速稳定倒计时界面
 
 //状态栏分块名称
 enum EM_StatusBarParts
@@ -97,7 +93,7 @@ enum EM_StatusBarParts
 };
 
 #define SHOW_DEBUG	// 定义此，则显示串口调试部分控件
-
+BOOL bExtiCountDown=FALSE;	// 是否退出倒计时
 
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
@@ -210,7 +206,9 @@ ON_MESSAGE(WM_COMM_RXCHAR, &CPMSRTestDlg::OnCommRxchar)
 ON_BN_CLICKED(IDC_BUTTON9, &CPMSRTestDlg::OnBnClickedButton9)
 ON_MESSAGE(WM_COMM_BREAK_DETECTED, &CPMSRTestDlg::OnCommBreakDetected)
 ON_MESSAGE(WM_COMM_RXFLAG_DETECTED, &CPMSRTestDlg::OnCommRxflagDetected)
-ON_MESSAGE(WM_WAITCOUNTDOWN, &CPMSRTestDlg::OnWaitcountdown)
+ON_BN_CLICKED(IDC_BUTTON10, &CPMSRTestDlg::OnBnClickedButton10)
+ON_MESSAGE(WM_ENABLESETCONTROLS, &CPMSRTestDlg::OnEnablesetcontrols)
+ON_MESSAGE(WM_DELETEDLGCOUNTDOWN, &CPMSRTestDlg::OnDeletedlgcountdown)
 END_MESSAGE_MAP()
 
 
@@ -546,7 +544,7 @@ void CPMSRTestDlg::ReadSettings()
 				//	Parity = atoi(temp); //获取传感器使能设置
 				//	strCOMStatus = strCOMStatus + " " + temp;
 				//}
-				else if (strContent.Left(n - 1) == _T("TestDelay"))
+				else if (strContent.Left(n - 1) == _T("StartDelay"))
 				{
 					temp = strContent.Mid(n + 2, m - n - 2); //如果相同，取出该字符串所设置的值
 					st_ConfigData.StartDelay = atoi(temp); //获取传感器使能设置
@@ -736,11 +734,10 @@ void CPMSRTestDlg::OnTimer(UINT_PTR nIDEvent)
 	// 电机启动延迟时间倒计时
 	if (st_FlagData.state == RUNSTATE_START0)
 	{
-		if (st_FlagData.countdowncnt > 0)
+		if ((st_FlagData.countdowncnt > 0) && DlgWaiting && bExtiCountDown)
 		{
 			st_FlagData.countdowncnt--;
-			//DlgWaiting.SendMessage(WM_WAITCOUNTDOWN, st_FlagData.countdowncnt, 0);
-			::SendMessage(DlgWaiting->GetSafeHwnd(), WM_WAITCOUNTDOWN, st_FlagData.countdowncnt, 0);
+			DlgWaiting->SendMessage(WM_WAITCOUNTDOWN, st_FlagData.countdowncnt, 0);
 		}
 	}
 	CDialogEx::OnTimer(nIDEvent);
@@ -980,7 +977,6 @@ void CPMSRTestDlg::CommandPress()
 	BOOL bNeedResponse = FALSE;
 	unsigned int respLength = 0;
 	unsigned char tmpCharValue = 0;
-	unsigned int tmp32;
 
 	bNeedResponse = TRUE;
 	switch (CPInvokeInstance.rcvHeader->cmd)
@@ -995,9 +991,21 @@ void CPMSRTestDlg::CommandPress()
 				st_CommPara.m_Comm.WriteToPort(byRxBuffer, respLength);
 
 				st_FlagData.countdowncnt = st_ConfigData.StartDelay;
+				if (st_FlagData.countdowncnt == 0)// 倒计时数据异常
+					return (void)AfxMessageBox("启动延时时间为0！");
+
 				// 显示倒计时界面
+				DlgWaiting = new CDlgWaiting();
 				DlgWaiting->Create(IDD_DLG_COUNTDOWN);
+				if (DlgWaiting == NULL)
+					return (void)AfxMessageBox("倒计时窗口句柄创建失败！");
+
+				bExtiCountDown = TRUE;
+				this->EnableWindow(FALSE);
 				DlgWaiting->ShowWindow(SW_SHOW);
+				OnEnablesetcontrols(FALSE,0);//EnableSettings(FALSE);// 输入控件为灰色
+				DlgWaiting->SendMessage(WM_WAITCOUNTDOWN, st_FlagData.countdowncnt, 0);
+
 				st_FlagData.state = RUNSTATE_START0;	// 启动被测电机，开始计时，延时设定时长后，发送步进电机移动命令
 				// 创建流程处理线程
 				AfxBeginThread(FlowProcessThread, this);
@@ -1019,7 +1027,7 @@ void CPMSRTestDlg::CommandPress()
 
 		case 0xF4:// 转速
 			bNeedResponse = FALSE;
-			st_FlagData.rotating_speed = (FLOAT)(*(USHORT*)CPInvokeInstance.payload) / 10.0;
+			st_FlagData.rotating_speed = (FLOAT)(*(USHORT*)CPInvokeInstance.payload) / (FLOAT)10.0;
 			st_FlagData.state = RUNSTATE_ROTAING;
 			break;
 		
@@ -1278,21 +1286,31 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 			{
 				if (st_FlagData.countdowncnt == 0)	// 延迟时间到
 				{
-					::SendMessage(DlgWaiting->GetSafeHwnd(), WM_CLOSE,0,0);
+					//::SendMessage(DlgWaiting->GetSafeHwnd(), WM_CLOSE,0,0);
 
 					st_FlagData.state = RUNSTATE_ROTAING;
 
 					// 发送步进电机移动步长
-					st_FlagData.steplen = st_ConfigData.motorlen / (st_ConfigData.testtimes + 1);
+					if (st_ConfigData.testtimes > 0)
+					{
+						dlg->SendStepLength();
+						st_ConfigData.testtimes--;
+					}
+						
+					/*st_FlagData.steplen = st_ConfigData.motorlen / (st_ConfigData.testtimes + 1);
 					PHeader header;
 					UINT respLength = 0;
 					CPInvokeInstance.HeaderInit(&header);
 					header.cmd = 0xF1;
 					header.len = 2;
 					CPInvokeInstance.PackProtocol(&header, (UCHAR*)&st_FlagData.steplen, 2, byTxBuffer, &respLength);
-					st_CommPara.m_Comm.WriteToPort(byTxBuffer, respLength);
+					st_CommPara.m_Comm.WriteToPort(byTxBuffer, respLength);*/
 
 					st_FlagData.state = RUNSTATE_START;
+					//// 退出线程
+					//UINT code;
+					//GetExitCodeThread(FlowProcessThread, (LPDWORD)&code);
+					//AfxEndThread(code, TRUE);//return 0;
 				}
 			}
 			break;
@@ -1320,17 +1338,101 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 	return 0;
 }
 
-// 等待被测电机转速稳定消息
-afx_msg LRESULT CPMSRTestDlg::OnWaitcountdown(WPARAM wParam, LPARAM lParam)
-{
-	int countdown = wParam;
-	CString str;
-	str.Format("%d", countdown);
 
-	if(DlgWaiting)
+// 调试信息，发送数据
+void CPMSRTestDlg::OnBnClickedButton10()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	CString str;
+
+	UpdateData(TRUE);
+	m_edit_SendData.GetWindowTextA(str);
+	if(m_check_SendHex.GetCheck())
 	{
-		DlgWaiting->m_static_countdown.SetWindowTextA(str);
-		UpdateData(FALSE);
+		TxLength = st_CommPara.m_Comm.String2Hex(str, &byTxBuffer[0]);
+		st_CommPara.m_Comm.WriteToPort(&byTxBuffer[0], TxLength);
 	}
+	else
+	{
+		TxLength = str.GetLength();
+		st_CommPara.m_Comm.WriteToPort(str);
+
+	}
+	st_CommPara.uiBytesSent += TxLength;
+}
+
+
+// 使能或禁止设置参数控件的输入
+//int CPMSRTestDlg::EnableSettings(bool bEnable)
+//{
+//	if (bEnable)	// 使能
+//	{
+//		m_combo_type.EnableWindow(TRUE);
+//		m_edit_length.EnableWindow(TRUE);
+//		m_edit_TestTimes.EnableWindow(TRUE);
+//		m_edit_Flux.EnableWindow(TRUE);
+//		m_edit_Pole.EnableWindow(TRUE);
+//		m_edit_SN.EnableWindow(TRUE);
+//	}
+//	else// 禁用
+//	{
+//		m_combo_type.EnableWindow(FALSE);
+//		m_edit_length.EnableWindow(FALSE);
+//		m_edit_TestTimes.EnableWindow(FALSE);
+//		m_edit_Flux.EnableWindow(FALSE);
+//		m_edit_Pole.EnableWindow(FALSE);
+//		m_edit_SN.EnableWindow(FALSE);
+//	}
+//	return 0;
+//}
+
+// 使能或禁止设置参数控件的输入
+afx_msg LRESULT CPMSRTestDlg::OnEnablesetcontrols(WPARAM wParam, LPARAM lParam)
+{
+	BOOL bEnable = (BOOL)wParam;
+
+	if (bEnable)	// 使能
+	{
+		m_combo_type.EnableWindow(TRUE);
+		m_edit_length.EnableWindow(TRUE);
+		m_edit_TestTimes.EnableWindow(TRUE);
+		m_edit_Flux.EnableWindow(TRUE);
+		m_edit_Pole.EnableWindow(TRUE);
+		m_edit_SN.EnableWindow(TRUE);
+	}
+	else// 禁用
+	{
+		m_combo_type.EnableWindow(FALSE);
+		m_edit_length.EnableWindow(FALSE);
+		m_edit_TestTimes.EnableWindow(FALSE);
+		m_edit_Flux.EnableWindow(FALSE);
+		m_edit_Pole.EnableWindow(FALSE);
+		m_edit_SN.EnableWindow(FALSE);
+	}
+	return 0;
+}
+
+
+// 向下位机发送步进电机移动距离
+void CPMSRTestDlg::SendStepLength()
+{
+	st_FlagData.steplen = st_ConfigData.motorlen / (st_ConfigData.testtimes + 1);
+	if (st_FlagData.steplen == 0)
+		return;
+
+	PHeader header;
+	UINT respLength = 0;
+	CPInvokeInstance.HeaderInit(&header);
+	header.cmd = 0xF1;
+	header.len = 2;
+	CPInvokeInstance.PackProtocol(&header, (UCHAR*)&st_FlagData.steplen, 2, byTxBuffer, &respLength);
+	st_CommPara.m_Comm.WriteToPort(byTxBuffer, respLength);
+}
+
+// 删除对象
+afx_msg LRESULT CPMSRTestDlg::OnDeletedlgcountdown(WPARAM wParam, LPARAM lParam)
+{
+	//delete DlgWaiting;
+	bExtiCountDown = FALSE;
 	return 0;
 }

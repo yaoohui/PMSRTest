@@ -1078,3 +1078,28 @@ void CSerialPort::FindComPort(void)
 		RegCloseKey(hKey);
 	}
 }
+
+
+// 把字符串转成数组，返回字节数
+int CSerialPort::String2Hex(CString srcstr, BYTE* hexdata)
+{
+	int data;
+	int hexdatalen = 0;
+	int len = srcstr.GetLength();
+	char cstr[3];
+	CString strtemp;
+	int i;
+
+	i = srcstr.Remove(' ');	// 移除空格
+	len -= i;
+	for (i = 0; i < len; i += 2)
+	{
+		strtemp = srcstr.Mid(i, 2);
+		sprintf_s(cstr, "%s", strtemp);
+		sscanf_s(cstr, "%x", &data);	// 把十六进制字符串转成数值
+		*(hexdata + hexdatalen) = data;
+		//(*hexdata).SetAt(hexdatalen, data);
+		hexdatalen++;
+	}
+	return hexdatalen;
+}
