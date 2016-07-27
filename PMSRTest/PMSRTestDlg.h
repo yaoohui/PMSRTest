@@ -148,4 +148,6 @@ protected:
 	afx_msg LRESULT OnDeletedlgcountdown(WPARAM wParam, LPARAM lParam);
 public:
 	afx_msg void OnBnClickedButton3();
+	// 向下位机发送判定结果并发送停止指令
+	void SendWarningAndStop();
 };

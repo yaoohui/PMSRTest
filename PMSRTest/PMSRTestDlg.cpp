@@ -57,6 +57,7 @@ struct FlagDataTypeDef// 标志结构体
 	UINT countdowncnt;	// 倒计时计数 
 	BOOL is3D;			// 是否3D显示
 	UINT remaintimes;	// 剩余次数
+	BOOL ispass;		// 判定结果，true为合格，false为不合格
 };
 
 
@@ -375,7 +376,9 @@ void CPMSRTestDlg::OpenComm()
 			st_CommPara.bIsCommOpen = TRUE;
 			m_StatusBar.SetText("串口打开成功", SBPART_COMM_STATE, 0);
 			CString strCOMStatus;
-			strCOMStatus = st_CommPara.strCommName + ", " + "9600bps, N81";
+			CString str;
+			str.Format("%d", st_CommPara.uiBaudRate);
+			strCOMStatus = st_CommPara.strCommName + ", " + str + "bps, N81";
 			m_StatusBar.SetText(strCOMStatus, SBPART_COMM, 0);
 
 			st_CommPara.m_Comm.StartMonitoring();// 启动串口类监听
@@ -1438,7 +1441,19 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 			{
 				if (st_FlagData.datalen > 0)	// 有数据时，显示波形
 					dlg->ShowWave();
-				st_FlagData.state = RUNSTATE_START;
+				if (st_FlagData.remaintimes == 0)
+				{
+					// 进行结果判定
+					st_FlagData.ispass = FALSE;
+					// .....
+
+					// 停止
+
+				}
+				else
+				{
+					st_FlagData.state = RUNSTATE_START;
+				}
 			}
 			break;
 		}
@@ -1566,4 +1581,21 @@ void CPMSRTestDlg::OnBnClickedButton3()
 		((CAspect)m_tchart.get_Aspect()).put_View3D(TRUE);
 		st_FlagData.is3D = TRUE;
 	}
+}
+
+
+// 向下位机发送判定结果并发送停止指令
+void CPMSRTestDlg::SendWarningAndStop()
+{
+	st_FlagData.steplen = st_ConfigData.motorlen / (st_ConfigData.testtimes + 1);
+	if (st_FlagData.steplen == 0)
+		return;
+
+	PHeader header;
+	UINT respLength = 0;
+	CPInvokeInstance.HeaderInit(&header);
+	header.cmd = 0xF1;
+	header.len = 2;
+	CPInvokeInstance.PackProtocol(&header, (UCHAR*)&st_FlagData.steplen, 2, byTxBuffer, &respLength);
+	st_CommPara.m_Comm.WriteToPort(byTxBuffer, respLength);
 }
