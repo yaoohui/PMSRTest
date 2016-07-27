@@ -40,8 +40,8 @@ unsigned char CommunicationProtocol::IsValidProtocol(unsigned char * pdata, unsi
 
 	//len = ((unsigned short)pdata[4] << 8) + pdata[5];
 	len = ((PHeader*)pdata)->len;
-	if (len + CRC_LENGTH + sizeof(PHeader) != length)	// 长度错误
-		return 2;
+	if (len + CRC_LENGTH + sizeof(PHeader) > length)	// 长度不足
+		return 1;
 
 	if (((PHeader*)pdata)->prefix != 0xAA || ((PHeader*)pdata)->flag != 0x99)
 		return 2;

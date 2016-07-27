@@ -15,6 +15,12 @@
 #include "CEnvironment.h"
 #include "CAxes.h"
 #include "CAxis.h"
+#include "CAspect.h"// 用于3D视图显示
+#include "CSurfaceSeries.h"
+#include "CIsoSurfaceSeries.h"// 3d序列
+#include "CWaterfallSeries.h"
+#include "CPen0.h"
+#include "CBrush0.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -49,6 +55,8 @@ struct FlagDataTypeDef// 标志结构体
 	UINT datalen;		// 采样数据长度
 	USHORT steplen;		// 步进电机移动步长，2字节，单位：mm
 	UINT countdowncnt;	// 倒计时计数 
+	BOOL is3D;			// 是否3D显示
+	UINT remaintimes;	// 剩余次数
 };
 
 
@@ -209,6 +217,7 @@ ON_MESSAGE(WM_COMM_RXFLAG_DETECTED, &CPMSRTestDlg::OnCommRxflagDetected)
 ON_BN_CLICKED(IDC_BUTTON10, &CPMSRTestDlg::OnBnClickedButton10)
 ON_MESSAGE(WM_ENABLESETCONTROLS, &CPMSRTestDlg::OnEnablesetcontrols)
 ON_MESSAGE(WM_DELETEDLGCOUNTDOWN, &CPMSRTestDlg::OnDeletedlgcountdown)
+ON_BN_CLICKED(IDC_BUTTON3, &CPMSRTestDlg::OnBnClickedButton3)
 END_MESSAGE_MAP()
 
 
@@ -260,7 +269,8 @@ BOOL CPMSRTestDlg::OnInitDialog()
 	Initinterface();//初始化界面
 	InitFont();//初始化界面字体
 	SetTimer(1, 1000, NULL);//启动定时器
-	
+	TChartInit();	// 图表控件初始化，主要是坐标轴设置
+
 	m_EditLogger.SetEditCtrl(m_edit_ReceiveData.m_hWnd);	// CEditLog类变量关联接收文本框
 
 	
@@ -1023,6 +1033,13 @@ void CPMSRTestDlg::CommandPress()
 
 		case 0xF2:// 停止
 			st_FlagData.state = RUNSTATE_STOP;
+			InitVariable();
+			OnEnablesetcontrols(TRUE, 0);// 输入控件为使能
+			m_tchart.RemoveAllSeries();	// 图表清除所有曲线
+			// 退出线程
+			UINT code;
+			GetExitCodeThread(FlowProcessThread, (LPDWORD)&code);
+			AfxEndThread(code, TRUE);
 			break;
 
 		case 0xF4:// 转速
@@ -1036,8 +1053,6 @@ void CPMSRTestDlg::CommandPress()
 			st_FlagData.datalen = CPInvokeInstance.rcvHeader->len;
 			memcpy(st_FlagData.data, CPInvokeInstance.payload, st_FlagData.datalen);
 			st_FlagData.state = RUNSTATE_SAMPLE;
-			//if (st_FlagData.datalen > 0)	// 有数据时，显示波形
-			//	ShowWave();
 			break;
 
 		default:
@@ -1161,18 +1176,91 @@ void CPMSRTestDlg::ShowDebugControls()
 // 在图表tchart上显示波形
 void CPMSRTestDlg::ShowWave()
 {
-	CSeries LineSeries1 = m_tchart.Series(0);// 直线序列
-	CSeries SurfaceSeries = m_tchart.Series(1);// surface序列
-	UINT i;
+	//CSeries LineSeries1;// = m_tchart.Series(0);// 直线序列
+	//CSeries SurfaceSeries;// = m_tchart.Series(1);// surface序列
+	//CIsoSurfaceSeries isoSurfaceSeries;
+	//UINT i,j;
 
-	LineSeries1.Clear();	// 清空数据
-	SurfaceSeries.Clear();
-	for (i = 0; i < st_FlagData.datalen; i++)
+	CSeries LineSeries;
+	CSeries SurfaceSeries;
+	CIsoSurfaceSeries IsoSurfaceSeries;
+	CWaterfallSeries WaterfallSeries;
+
+	// 添加曲线序列
+	if (st_FlagData.is3D)
 	{
-		LineSeries1.AddXY(i, st_FlagData.data[i], 0, RGB(255, 0, 0));
-		SurfaceSeries.AddXY(i, st_FlagData.data[i], 0, RGB(255, 0, 0));
+		//m_tchart.AddSeries(scIsoSurface);
+		m_tchart.AddSeries(scWaterfall);
+		SurfaceSeries = m_tchart.Series(st_ConfigData.testtimes - st_FlagData.remaintimes - 1);
+		
+		//IsoSurfaceSeries = SurfaceSeries.get_asIsoSurface();// 3D序列关联2D
+		WaterfallSeries = SurfaceSeries.get_asWaterfall();
+		((CBrush0)WaterfallSeries.get_Brush()).put_Style(bsClear);// 无填充
+		((CPen0)WaterfallSeries.get_WaterLines()).put_Visible(false);// 无支持线
+		((CPen0)SurfaceSeries.get_Pen()).put_Color(RGB(255, 0, 0));// 曲线颜色
+	}
+	else
+	{
+		m_tchart.AddSeries(scLine);
+		LineSeries = m_tchart.Series(st_ConfigData.testtimes - st_FlagData.remaintimes - 1);
 	}
 
+	// 下面使用AddArray函数绘图，比AddXY绘图速度快，不需要每次刷新
+	COleSafeArray XValues, YValues;
+	COleSafeArray ZValues;
+	DWORD wLength = st_FlagData.datalen;
+	DWORD zLength = 5;
+	XValues.Create(VT_R8, 1, &wLength);//VT_R8就是指double 
+	YValues.Create(VT_R8, 1, &wLength);
+	long i;
+	double temp;
+	for ( i = 0; i < wLength; i++)
+	{
+		temp = i;
+		XValues.PutElement(&i, &temp);
+		temp = st_FlagData.data[i];
+		YValues.PutElement(&i, &temp);
+	}
+	if (st_FlagData.is3D)
+	{
+		//ZValues.Create(VT_R8, 1, &wLength);
+		//for (i = 0; i < wLength; i++)
+		//{
+		//	temp = i;
+		//	ZValues.PutElement(&i, &temp);
+		//}
+		//IsoSurfaceSeries.AddArrayXYZ(XValues, YValues, ZValues);
+		
+		for (i = 0; i < wLength; i++)
+		{
+			WaterfallSeries.AddXYZ(i, st_FlagData.data[i], st_FlagData.remaintimes, 0, RGB(255, st_FlagData.remaintimes*80, 0));
+		}
+	}
+	else
+	{
+		LineSeries.AddArray(wLength, YValues, XValues);
+	}
+
+	//LineSeries1.Clear();	// 清空数据
+	//SurfaceSeries.Clear();
+
+	//if (st_FlagData.is3D)	// 3d显示
+	//{
+	//	for (i = 0; i < st_FlagData.datalen; i++)
+	//	{
+	//		for (j = 0; j < 5; j++)	// Z不能为一个定值，必须有一定宽度
+	//			isoSurfaceSeries.AddXYZ(i, st_FlagData.data[i], j + 5 * (st_ConfigData.testtimes - st_FlagData.remaintimes), 0, RGB(255, st_FlagData.data[i], 0));
+	//	}
+	//}
+	//else
+	//{
+	//	for (i = 0; i < st_FlagData.datalen; i++)
+	//	{
+	//		LineSeries1.AddXY(i, st_FlagData.data[i], 0, RGB(255, 0, 0));
+	//		//SurfaceSeries.AddXY(i, st_FlagData.data[i], 0, RGB(255, 0, 0));
+	//	}
+	//}
+	//UpdateWindow();
 }
 
 
@@ -1195,7 +1283,12 @@ void CPMSRTestDlg::TChartInit()
 	bottomAxis.put_Maximum(401);// 横坐标最大值
 	bottomAxis.put_Minimum(0);
 	bottomAxis.put_Increment(1);
+	((CAxis)axes.get_Depth()).put_Visible(TRUE);// 显示z轴
+	((CAxis)axes.get_Depth()).put_Automatic(false);
+	((CAxis)axes.get_Depth()).put_Minimum(0);
+	((CAxis)axes.get_Depth()).put_Maximum(20);
 
+	((CAspect)m_tchart.get_Aspect()).put_View3D(st_FlagData.is3D);// 2D
 	m_tchart.SetFocus();
 }
 
@@ -1211,6 +1304,7 @@ void CPMSRTestDlg::InitVariable()
 	st_FlagData.datalen = 0;
 	st_FlagData.steplen = 0;
 	st_FlagData.countdowncnt = 0;
+	st_FlagData.is3D = FALSE;// 默认2D显示
 
 	st_CommPara.bIsCommOpen = FALSE;
 	st_CommPara.strReceivedData = "";
@@ -1223,6 +1317,7 @@ void CPMSRTestDlg::InitVariable()
 
 	// 控件初始化
 	m_edit_Flux.SetWindowTextA("");
+	m_edit_Pole.SetWindowTextA("");
 }
 
 
@@ -1287,14 +1382,17 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 				if (st_FlagData.countdowncnt == 0)	// 延迟时间到
 				{
 					//::SendMessage(DlgWaiting->GetSafeHwnd(), WM_CLOSE,0,0);
-
-					st_FlagData.state = RUNSTATE_ROTAING;
+					st_FlagData.remaintimes = st_ConfigData.testtimes;// 设置测试次数计数
 
 					// 发送步进电机移动步长
-					if (st_ConfigData.testtimes > 0)
+					if (st_FlagData.remaintimes > 0)
 					{
+						dlg->m_tchart.RemoveAllSeries();// 清除图表所有曲线
+
 						dlg->SendStepLength();
-						st_ConfigData.testtimes--;
+						st_FlagData.remaintimes--;
+						
+						st_FlagData.state = RUNSTATE_ROTAING;
 					}
 						
 					/*st_FlagData.steplen = st_ConfigData.motorlen / (st_ConfigData.testtimes + 1);
@@ -1306,11 +1404,24 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 					CPInvokeInstance.PackProtocol(&header, (UCHAR*)&st_FlagData.steplen, 2, byTxBuffer, &respLength);
 					st_CommPara.m_Comm.WriteToPort(byTxBuffer, respLength);*/
 
-					st_FlagData.state = RUNSTATE_START;
+					
 					//// 退出线程
 					//UINT code;
 					//GetExitCodeThread(FlowProcessThread, (LPDWORD)&code);
 					//AfxEndThread(code, TRUE);//return 0;
+				}
+			}
+			break;
+
+			case RUNSTATE_START:
+			{
+				// 发送步进电机移动步长
+				if (st_FlagData.remaintimes > 0)
+				{
+					dlg->SendStepLength();
+					st_FlagData.remaintimes--;
+
+					st_FlagData.state = RUNSTATE_ROTAING;
 				}
 			}
 			break;
@@ -1435,4 +1546,24 @@ afx_msg LRESULT CPMSRTestDlg::OnDeletedlgcountdown(WPARAM wParam, LPARAM lParam)
 	//delete DlgWaiting;
 	bExtiCountDown = FALSE;
 	return 0;
+}
+
+// 3D显示切换
+void CPMSRTestDlg::OnBnClickedButton3()
+{
+	// TODO:  在此添加控件通知处理程序代码
+	if (st_FlagData.is3D)
+	{
+		// 切换为2D显示
+		m_button_2D3D.SetWindowTextA("3D");
+		((CAspect)m_tchart.get_Aspect()).put_View3D(FALSE);
+		st_FlagData.is3D = FALSE;
+	}
+	else
+	{
+		// 切换为3D显示
+		m_button_2D3D.SetWindowTextA("2D");
+		((CAspect)m_tchart.get_Aspect()).put_View3D(TRUE);
+		st_FlagData.is3D = TRUE;
+	}
 }

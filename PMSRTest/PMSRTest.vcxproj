@@ -19,7 +19,7 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v140</PlatformToolset>
+    <PlatformToolset>v120</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
     <UseOfMfc>Static</UseOfMfc>
   </PropertyGroup>
@@ -109,13 +109,19 @@
     <Text Include="ReadMe.txt" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="CAspect.h" />
     <ClInclude Include="CAxes.h" />
     <ClInclude Include="CAxis.h" />
+    <ClInclude Include="CBrush0.h" />
     <ClInclude Include="CEnvironment.h" />
+    <ClInclude Include="CIsoSurfaceSeries.h" />
     <ClInclude Include="CommunicationProtocol.h" />
+    <ClInclude Include="CPen0.h" />
     <ClInclude Include="CSeries.h" />
+    <ClInclude Include="CSurfaceSeries.h" />
     <ClInclude Include="CTChart.h" />
     <ClInclude Include="CTools.h" />
+    <ClInclude Include="CWaterfallSeries.h" />
     <ClInclude Include="DlgProxy.h" />
     <ClInclude Include="DlgWaiting.h" />
     <ClInclude Include="EditLog.h" />

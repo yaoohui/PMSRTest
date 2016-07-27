@@ -78,6 +78,24 @@
     <ClInclude Include="DlgWaiting.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="CAspect.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CWaterfallSeries.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CIsoSurfaceSeries.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CSurfaceSeries.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CBrush0.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CPen0.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="PMSRTest.cpp">

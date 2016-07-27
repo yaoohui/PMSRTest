@@ -146,4 +146,6 @@ public:
 	void SendStepLength();
 protected:
 	afx_msg LRESULT OnDeletedlgcountdown(WPARAM wParam, LPARAM lParam);
+public:
+	afx_msg void OnBnClickedButton3();
 };
