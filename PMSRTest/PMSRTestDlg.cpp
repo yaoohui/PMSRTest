@@ -88,6 +88,8 @@ CString strIniFileName = "set.ini";
 CPMSRSet dlgSettings;
 CommunicationProtocol CPInvokeInstance;// 通信协议对象
 CEditLog  m_EditLogger;// 用于显示接收数据的实例
+CWinThread *pFlowThread = NULL;
+
 
 //状态栏分块名称
 enum EM_StatusBarParts
@@ -103,7 +105,9 @@ enum EM_StatusBarParts
 
 #define SHOW_DEBUG	// 定义此，则显示串口调试部分控件
 BOOL bExtiCountDown=FALSE;	// 是否退出倒计时
-
+// 定义曲线颜色，注意最多15个颜色
+unsigned long LineColor[15] = { RGB(255,0,0), RGB(0,255,0), RGB(0,0,255), RGB(255,128,128), RGB(0,255,255), RGB(255,128,0), RGB(0,128,0), RGB(255,128,192), RGB(128,128,255), RGB(128,0,64), RGB(128,0,255), RGB(128,0,0), RGB(255,0,128), RGB(0,0,0), RGB(128,128,128) };
+#define ZINTERVER	20	// Z轴深度间隔
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
 
@@ -194,6 +198,10 @@ void CPMSRTestDlg::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_BUTTON10, m_button_Send);
 	DDX_Control(pDX, IDC_STATIC_RESULT, m_static_Result);
 	DDX_Control(pDX, IDC_EDIT14, m_edit_Result);
+	DDX_Control(pDX, IDC_STATIC_ROTAING, m_static_Rotaing);
+	DDX_Control(pDX, IDC_EDIT15, m_edit_Rotaing);
+	DDX_Control(pDX, IDC_STATIC_REMAINTIMES, m_static_RemainTimes);
+	DDX_Control(pDX, IDC_EDIT16, m_edit_RemainTimes);
 }
 
 BEGIN_MESSAGE_MAP(CPMSRTestDlg, CDialogEx)
@@ -760,8 +768,8 @@ void CPMSRTestDlg::OnTimer(UINT_PTR nIDEvent)
 void CPMSRTestDlg::InitFont()
 {
 	CFont *f = new CFont;
-	f->CreateFont(30, 0, 0, 0, 0, FALSE, FALSE, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("微软雅黑"));
-	//f->CreateFont(36, 12, 0, 0, FW_BOLD, FALSE, FALSE, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("微软雅黑"));
+	f->CreateFont(26, 0, 0, 0, 0, FALSE, FALSE, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("微软雅黑"));
+//	f->CreateFont(36, 12, 0, 0, FW_BOLD, FALSE, FALSE, 0, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("微软雅黑"));
 	((CStatic *)GetDlgItem(IDC_STATIC_TYPE))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_STATIC_LENGTH))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_STATIC_TESTTIMES))->SetFont(f, TRUE);
@@ -778,6 +786,10 @@ void CPMSRTestDlg::InitFont()
 	m_edit_SN.SetFont(f, TRUE);
 	m_edit_Result.SetFont(f, TRUE);
 	m_static_Result.SetFont(f, TRUE);
+	m_static_Rotaing.SetFont(f, TRUE);
+	m_edit_Rotaing.SetFont(f, TRUE);
+	m_static_RemainTimes.SetFont(f, TRUE);
+	m_edit_RemainTimes.SetFont(f, TRUE);
 
 	((CStatic *)GetDlgItem(IDOK))->SetFont(f, TRUE);
 	((CStatic *)GetDlgItem(IDC_BUTTON1))->SetFont(f, TRUE);
@@ -807,6 +819,7 @@ void CPMSRTestDlg::LayoutFrame()
 {
 	CRect RectClient, RectTemp; 
 	UINT uiLeft = 0, uiTop = 0, uiWidth = 0, uiHeight = 0;
+	UINT EditWidth = 70, EditHeight = 32;// 小eidt的大小
 
 	GetClientRect(&RectClient); 
 	// group"测试参数"
@@ -824,24 +837,24 @@ void CPMSRTestDlg::LayoutFrame()
 	m_combo_type.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 
 	// "长度"
-	uiTop += 50;
+	uiTop += 40;
 	m_static_Length.SetWindowPos(this, uiLeft, uiTop, 0,0, SWP_NOZORDER | SWP_NOSIZE);
 	m_static_Length.GetClientRect(&RectTemp);
-	m_edit_length.SetWindowPos(this, uiLeft+RectTemp.Width()+2, uiTop, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+	m_edit_length.SetWindowPos(this, uiLeft+RectTemp.Width()+2, uiTop, EditWidth, EditHeight, SWP_NOZORDER);
 	// "磁通量"
 	m_static_Flux.SetWindowPos(this, uiLeft + uiWidth / 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 	m_static_Flux.GetClientRect(&RectTemp);
-	m_edit_Flux.SetWindowPos(this, uiLeft + uiWidth / 2 + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_edit_Flux.SetWindowPos(this, uiLeft + uiWidth / 2 + RectTemp.Width() + 2, uiTop, EditWidth, EditHeight, SWP_NOZORDER);
 
 	// "测试次数"
-	uiTop += 50;
+	uiTop += 40;
 	m_static_TestTimes.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 	m_static_TestTimes.GetClientRect(&RectTemp);
-	m_edit_TestTimes.SetWindowPos(this, uiLeft+RectTemp.Width()+2, uiTop, 0,0, SWP_NOZORDER | SWP_NOSIZE);
+	m_edit_TestTimes.SetWindowPos(this, uiLeft+RectTemp.Width()+2, uiTop, EditWidth, EditHeight, SWP_NOZORDER);
 	// "磁极数"
 	m_static_Pole.SetWindowPos(this, uiLeft + uiWidth / 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 	m_static_Pole.GetClientRect(&RectTemp);
-	m_edit_Pole.SetWindowPos(this, uiLeft + uiWidth / 2 + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_edit_Pole.SetWindowPos(this, uiLeft + uiWidth / 2 + RectTemp.Width() + 2, uiTop, EditWidth, EditHeight, SWP_NOZORDER);
 
 
 	// group"测试结果"
@@ -849,7 +862,7 @@ void CPMSRTestDlg::LayoutFrame()
 	uiLeft = RectClient.Width() * 2 / 3;
 	uiTop = RectTemp.bottom + 6;//uiHeight + 50;
 	uiWidth = RectTemp.Width();//RectClient.Width() / 3 - 20;
-	uiHeight = 200;
+	uiHeight = 220;
 	m_group_Result.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
 
 	// "转子编号"
@@ -857,24 +870,35 @@ void CPMSRTestDlg::LayoutFrame()
 	uiTop += 50;
 	m_static_SN.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 	m_static_SN.GetClientRect(&RectTemp);
-	m_edit_SN.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_edit_SN.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, uiWidth-180, EditHeight, SWP_NOZORDER);
 
 	// "重量"
-	uiTop += 50;
+	uiTop += 40;
 	m_static_Weight.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 	m_static_Weight.GetClientRect(&RectTemp);
-	m_edit_Weight.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+	m_edit_Weight.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, uiWidth-180, EditHeight, SWP_NOZORDER);
+	
+	// "转速"
+	uiTop += 40;
+	m_static_Rotaing.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_Rotaing.GetClientRect(&RectTemp);
+	m_edit_Rotaing.SetWindowPos(this, uiLeft + RectTemp.Width() + 4, uiTop, EditWidth, EditHeight, SWP_NOZORDER);
+	// "剩余次数"
+	m_static_RemainTimes.SetWindowPos(this, uiLeft + uiWidth / 2, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+	m_static_RemainTimes.GetClientRect(&RectTemp);
+	m_edit_RemainTimes.SetWindowPos(this, uiLeft + uiWidth / 2 + RectTemp.Width() + 2, uiTop, EditWidth, EditHeight, SWP_NOZORDER);
+
 	// "测试结果"
-	uiTop += 50;
+	uiTop += 40;
 	m_static_Result.SetWindowPos(this, uiLeft, uiTop, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 	m_static_Result.GetClientRect(&RectTemp);
-	m_edit_Result.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+	m_edit_Result.SetWindowPos(this, uiLeft + RectTemp.Width() + 2, uiTop, uiWidth-180, EditHeight, SWP_NOZORDER);
 
 	// 按钮
 	m_group_Result.GetWindowRect(&RectTemp);
 	uiLeft = RectClient.Width() * 2 / 3;
 	uiTop = RectTemp.bottom + 10;
-	uiWidth = 88; uiHeight = 80;
+	uiWidth = 88; uiHeight = 50;
 	m_button_Keyboard.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
 	uiLeft += uiWidth + 20;
 	m_button_ScreenShot.SetWindowPos(this, uiLeft, uiTop, uiWidth, uiHeight, SWP_NOZORDER);
@@ -1003,6 +1027,12 @@ void CPMSRTestDlg::CommandPress()
 				CPInvokeInstance.PackProtocol(CPInvokeInstance.rcvHeader, CPInvokeInstance.payload, CPInvokeInstance.payloadLength, byRxBuffer, &respLength);
 				st_CommPara.m_Comm.WriteToPort(byRxBuffer, respLength);
 
+				// 清除结果
+				m_edit_Result.SetWindowTextA("");
+				m_edit_Weight.SetWindowTextA("");
+				m_edit_Rotaing.SetWindowTextA("");
+				m_edit_RemainTimes.SetWindowTextA("");
+
 				st_FlagData.countdowncnt = st_ConfigData.StartDelay;
 				if (st_FlagData.countdowncnt == 0)// 倒计时数据异常
 					return (void)AfxMessageBox("启动延时时间为0！");
@@ -1021,7 +1051,7 @@ void CPMSRTestDlg::CommandPress()
 
 				st_FlagData.state = RUNSTATE_START0;	// 启动被测电机，开始计时，延时设定时长后，发送步进电机移动命令
 				// 创建流程处理线程
-				AfxBeginThread(FlowProcessThread, this);
+				pFlowThread = AfxBeginThread(FlowProcessThread, this);
 			}
 			else// 读取失败
 			{
@@ -1038,11 +1068,8 @@ void CPMSRTestDlg::CommandPress()
 			st_FlagData.state = RUNSTATE_STOP;
 			InitVariable();
 			OnEnablesetcontrols(TRUE, 0);// 输入控件为使能
+			m_button_2D3D.EnableWindow(TRUE);
 			m_tchart.RemoveAllSeries();	// 图表清除所有曲线
-			// 退出线程
-			UINT code;
-			GetExitCodeThread(FlowProcessThread, (LPDWORD)&code);
-			AfxEndThread(code, TRUE);
 			break;
 
 		case 0xF4:// 转速
@@ -1149,8 +1176,9 @@ void CPMSRTestDlg::OnBnClickedButton9()
 	RxLength = 0;
 
 	// 清除图表
-	CSeries LineSeries1 = m_tchart.Series(0);// 直线序列
-	LineSeries1.Clear();	// 清空数据
+	//CSeries LineSeries1 = m_tchart.Series(0);// 直线序列
+	//LineSeries1.Clear();	// 清空数据
+	m_tchart.RemoveAllSeries();
 
 }
 
@@ -1186,26 +1214,30 @@ void CPMSRTestDlg::ShowWave()
 
 	CSeries LineSeries;
 	CSeries SurfaceSeries;
-	CIsoSurfaceSeries IsoSurfaceSeries;
+	//CIsoSurfaceSeries IsoSurfaceSeries;
 	CWaterfallSeries WaterfallSeries;
+	UINT count = st_ConfigData.testtimes - st_FlagData.remaintimes - 1;// 从0开始
 
 	// 添加曲线序列
 	if (st_FlagData.is3D)
 	{
 		//m_tchart.AddSeries(scIsoSurface);
 		m_tchart.AddSeries(scWaterfall);
-		SurfaceSeries = m_tchart.Series(st_ConfigData.testtimes - st_FlagData.remaintimes - 1);
+		SurfaceSeries = m_tchart.Series(count);
 		
 		//IsoSurfaceSeries = SurfaceSeries.get_asIsoSurface();// 3D序列关联2D
 		WaterfallSeries = SurfaceSeries.get_asWaterfall();
 		((CBrush0)WaterfallSeries.get_Brush()).put_Style(bsClear);// 无填充
 		((CPen0)WaterfallSeries.get_WaterLines()).put_Visible(false);// 无支持线
-		((CPen0)SurfaceSeries.get_Pen()).put_Color(RGB(255, 0, 0));// 曲线颜色
+		//((CPen0)SurfaceSeries.get_Pen()).put_Color(RGB(255, 0, 255));// 曲线颜色
+		//SurfaceSeries.put_Color(RGB(0, 0, 255));
 	}
 	else
 	{
 		m_tchart.AddSeries(scLine);
-		LineSeries = m_tchart.Series(st_ConfigData.testtimes - st_FlagData.remaintimes - 1);
+		LineSeries = m_tchart.Series(count);
+		//((CPen0)LineSeries.get_Pen()).put_Color(LineColor[count]);// 曲线颜色无效果
+		LineSeries.put_Color(LineColor[count]);
 	}
 
 	// 下面使用AddArray函数绘图，比AddXY绘图速度快，不需要每次刷新
@@ -1217,7 +1249,7 @@ void CPMSRTestDlg::ShowWave()
 	YValues.Create(VT_R8, 1, &wLength);
 	long i;
 	double temp;
-	for ( i = 0; i < wLength; i++)
+	for ( i = 0; (DWORD)i < wLength; i++)
 	{
 		temp = i;
 		XValues.PutElement(&i, &temp);
@@ -1234,9 +1266,9 @@ void CPMSRTestDlg::ShowWave()
 		//}
 		//IsoSurfaceSeries.AddArrayXYZ(XValues, YValues, ZValues);
 		
-		for (i = 0; i < wLength; i++)
+		for (i = 0; (DWORD)i < wLength; i++)
 		{
-			WaterfallSeries.AddXYZ(i, st_FlagData.data[i], st_FlagData.remaintimes, 0, RGB(255, st_FlagData.remaintimes*80, 0));
+			WaterfallSeries.AddXYZ(i, st_FlagData.data[i], (count+1)*ZINTERVER, 0, RGB(0, 0, 255));//问题? 传递颜色参数LineColor[count]时，出错
 		}
 	}
 	else
@@ -1290,8 +1322,12 @@ void CPMSRTestDlg::TChartInit()
 	((CAxis)axes.get_Depth()).put_Automatic(false);
 	((CAxis)axes.get_Depth()).put_Minimum(0);
 	((CAxis)axes.get_Depth()).put_Maximum(20);
-
+	
 	((CAspect)m_tchart.get_Aspect()).put_View3D(st_FlagData.is3D);// 2D
+	((CAspect)m_tchart.get_Aspect()).put_Chart3DPercent(60);//调整3D纵深比 
+
+	// 网格
+	
 	m_tchart.SetFocus();
 }
 
@@ -1321,6 +1357,11 @@ void CPMSRTestDlg::InitVariable()
 	// 控件初始化
 	m_edit_Flux.SetWindowTextA("");
 	m_edit_Pole.SetWindowTextA("");
+	m_edit_Weight.SetWindowTextA("");
+	m_edit_Rotaing.SetWindowTextA("");
+	m_edit_RemainTimes.SetWindowTextA("");
+	m_edit_Result.SetWindowTextA("");
+	m_edit_SN.SetWindowTextA("");
 }
 
 
@@ -1374,6 +1415,7 @@ int CPMSRTestDlg::ReadParameters()
 UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 {
 	CPMSRTestDlg* dlg = (CPMSRTestDlg*)pParam;
+	CString str;
 
 	while (1)
 	{
@@ -1386,6 +1428,12 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 				{
 					//::SendMessage(DlgWaiting->GetSafeHwnd(), WM_CLOSE,0,0);
 					st_FlagData.remaintimes = st_ConfigData.testtimes;// 设置测试次数计数
+					str.Format("%d", st_FlagData.remaintimes);
+					dlg->m_edit_RemainTimes.SetWindowTextA(str);
+
+					// 调整Z轴深度
+					CAxes axes = dlg->m_tchart.get_Axis();
+					((CAxis)axes.get_Depth()).put_Maximum((st_ConfigData.testtimes)*ZINTERVER);
 
 					// 发送步进电机移动步长
 					if (st_FlagData.remaintimes > 0)
@@ -1395,7 +1443,7 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 						dlg->SendStepLength();
 						st_FlagData.remaintimes--;
 						
-						st_FlagData.state = RUNSTATE_ROTAING;
+						st_FlagData.state = RUNSTATE_IDLE;
 					}
 						
 					/*st_FlagData.steplen = st_ConfigData.motorlen / (st_ConfigData.testtimes + 1);
@@ -1408,10 +1456,6 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 					st_CommPara.m_Comm.WriteToPort(byTxBuffer, respLength);*/
 
 					
-					//// 退出线程
-					//UINT code;
-					//GetExitCodeThread(FlowProcessThread, (LPDWORD)&code);
-					//AfxEndThread(code, TRUE);//return 0;
 				}
 			}
 			break;
@@ -1424,7 +1468,7 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 					dlg->SendStepLength();
 					st_FlagData.remaintimes--;
 
-					st_FlagData.state = RUNSTATE_ROTAING;
+					st_FlagData.state = RUNSTATE_IDLE;
 				}
 			}
 			break;
@@ -1432,23 +1476,43 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 			// 获得转速
 			case RUNSTATE_ROTAING:
 			{
-
+				str.Format("%6.1f", st_FlagData.rotating_speed);
+				dlg->m_edit_Rotaing.SetWindowTextA(str);
+				st_FlagData.state = RUNSTATE_IDLE;
 			}
 			break;
 
 			// 获得采样数据
 			case RUNSTATE_SAMPLE:
 			{
+				//3D/2D按钮禁用
+				dlg->m_button_2D3D.EnableWindow(FALSE);
+
 				if (st_FlagData.datalen > 0)	// 有数据时，显示波形
 					dlg->ShowWave();
+
+				str.Format("%d", st_FlagData.remaintimes);
+				dlg->m_edit_RemainTimes.SetWindowTextA(str);
+
 				if (st_FlagData.remaintimes == 0)
 				{
 					// 进行结果判定
 					st_FlagData.ispass = FALSE;
 					// .....
+					dlg->m_edit_Result.SetWindowTextA("合格");
 
 					// 停止
-
+					st_FlagData.state = RUNSTATE_STOP;
+					dlg->SendWarningAndStop();
+					// 界面恢复
+					dlg->OnEnablesetcontrols(TRUE, 0);
+					dlg->m_button_2D3D.EnableWindow(TRUE);
+					// 退出进程
+					return 0;
+					//// 退出线程
+					//UINT code;
+					//GetExitCodeThread(FlowProcessThread, (LPDWORD)&code);
+					//AfxEndThread(code, TRUE);//return 0;
 				}
 				else
 				{
@@ -1456,6 +1520,13 @@ UINT CPMSRTestDlg::FlowProcessThread(LPVOID pParam)
 				}
 			}
 			break;
+
+			case RUNSTATE_IDLE:
+				break;
+
+			// 接收到停止命令，退出
+			case RUNSTATE_STOP:
+				return 1;// 退出线程
 		}
 
 
@@ -1587,14 +1658,11 @@ void CPMSRTestDlg::OnBnClickedButton3()
 // 向下位机发送判定结果并发送停止指令
 void CPMSRTestDlg::SendWarningAndStop()
 {
-	st_FlagData.steplen = st_ConfigData.motorlen / (st_ConfigData.testtimes + 1);
-	if (st_FlagData.steplen == 0)
-		return;
-
 	PHeader header;
 	UINT respLength = 0;
+
 	CPInvokeInstance.HeaderInit(&header);
-	header.cmd = 0xF1;
+	header.cmd = 0xF2;
 	header.len = 2;
 	CPInvokeInstance.PackProtocol(&header, (UCHAR*)&st_FlagData.steplen, 2, byTxBuffer, &respLength);
 	st_CommPara.m_Comm.WriteToPort(byTxBuffer, respLength);

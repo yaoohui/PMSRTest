@@ -150,4 +150,8 @@ public:
 	afx_msg void OnBnClickedButton3();
 	// 向下位机发送判定结果并发送停止指令
 	void SendWarningAndStop();
+	CStatic m_static_Rotaing;
+	CEdit m_edit_Rotaing;
+	CStatic m_static_RemainTimes;
+	CEdit m_edit_RemainTimes;
 };

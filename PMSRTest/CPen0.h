@@ -1,6 +1,7 @@
 // 从类型库向导中用“添加类”创建的计算机生成的 IDispatch 包装器类
 
-#import "C:\\Windows\\SysWOW64\\TEECHA~1.OCX" no_namespace
+//#import "C:\\Windows\\SysWOW64\\TEECHA~1.OCX" no_namespace
+#import "C:\\Windows\\System32\\TeeChart8.ocx" no_namespace
 // CPen0 包装器类
 
 class CPen0 : public COleDispatchDriver
